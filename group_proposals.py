@@ -40,6 +40,7 @@ from scipy.optimize import curve_fit
 
 ### FOR NLP
 import fitz
+fitz.TOOLS.mupdf_display_errors(False)
 import nltk
 import gensim
 from gensim import corpora
@@ -53,6 +54,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pyLDAvis
 import pyLDAvis.gensim
+
 
 # ============== Define Functions ===============
 
@@ -91,6 +93,9 @@ def get_pages(d, pl):
     ### GET NUMBER OF PAGES
     pn = d.pageCount
 
+    check_words = ["contents", "c o n t e n t s", "budget", "cost", "costs",
+                   "submitted to", "purposely left blank", "restrictive notice"]
+
     ### LOOP THROUGH PDF PAGES
     ps = 0
     for i, val in enumerate(np.arange(pn)):
@@ -101,19 +106,59 @@ def get_pages(d, pl):
         
         ### FIND PROPOSAL START USING END OF SECTION X
         if ('SECTION X - Budget' in t1) & ('SECTION X - Budget' not in t2):
-            
-            ### PROPOSAL USUALLY STARTS 2 PAGES AFTER (I.E., INCLDUES TOC)
-            ps += val + 2
-            
+
+            ### SET START PAGE
+            ps = val + 1
+
+            ### ATTEMPT TO CORRECT FOR (ASSUMED-TO-BE SHORT) COVER PAGES
+            if len(t2) < 500:
+                ps += 1
+                t2 = get_text(d, val + 2)
+
+            ### ACCOUNT FOR TOC OR SUMMARIES
+            if any([x in t2.lower() for x in check_words]):
+                ps += 1
+
             ### ASSUMES AUTHORS USED FULL PAGE LIMIT
-            pe  = ps + (pl - 1)
-            
+            pe  = ps + (pl - 1) 
+                        
         ### EXIT LOOP IF START PAGE FOUND
         if ps != 0:
             break 
 
+    ### ATTEMPT TO CORRECT FOR TOC > 1 PAGE OR SUMMARIES
+    if any([x in get_text(d, ps).lower() for x in check_words]):
+        ps += 1
+        pe += 1
+
+    ### CHECK THAT PAGE AFTER LAST IS REFERENCES
+    Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
+    if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
+
+        ### IF NOT, TRY NEXT PAGE (OR TWO) AND UPDATED LAST PAGE NUMBER
+        if any([x in get_text(d, pe + 2).lower() for x in Ref_Words]):
+            pe += 1
+        elif any([x in get_text(d, pe + 3).lower() for x in Ref_Words]):
+            pe += 2
+
+        ### CHECK THEY DIDN'T GO UNDER THE PAGE LIMIT
+        if any([x in get_text(d, pe).lower() for x in Ref_Words]):
+            pe -= 1
+        elif any([x in get_text(d, pe - 1).lower() for x in Ref_Words]):
+            pe -= 2
+        elif any([x in get_text(d, pe - 2).lower() for x in Ref_Words]):
+            pe -= 3
+        elif any([x in get_text(d, pe - 3).lower() for x in Ref_Words]):
+            pe -= 4
+
     ### PRINT TO SCREEN (ACCOUNTING FOR ZERO-INDEXING)
     print("\n\tTotal pages = {},  Start page = {},   End page = {}".format(pn, ps + 1, pe + 1))
+
+    ### PRINT IF WENT OVER PAGE LIMIT
+    if pe - ps > 14:
+        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- OVER !!!!!", 'blue'))
+    if pe - ps < 13:
+        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- UNDER !!!!!", 'blue'))
 
     return pn, ps, pe
 
@@ -234,7 +279,7 @@ def plot_wc(opath, fn, wc_a, wc_c, nbins=25):
     fig.savefig(os.path.join(opath, 'pp_wc_dist.pdf'), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     plt.close('all')
 
-    ### RETURN SUSPICIOUS PROPOSALS
+    ### RETURN PROPOSALS WITH CURIOUS WORD COUNTS
     ind_a = np.where( (wc_a > mu_a + 2 * std_a) | (wc_a < mu_a - 2 * std_a) )
     ind_c = np.where( (wc_c > mu_c + 2 * std_c) | (wc_c < mu_c - 2 * std_c) )
 
@@ -307,20 +352,20 @@ def exp_fit(x, a, b, c):
 
 # ====================== Set Inputs =======================
 
-### SET 
+### SET THINGS TO DO
 Process_Proposals = True                                # DO NLP PRE-PROCESSING
 Make_LDA_Models = False                                 # MAKE ML MODELS
 
 ### SET INPUTS THAT ARE PROGRAM-SPECIFIC
-PDF_Path  = './XRP20_Proposals'                         # PATH TO PROPOSAL PDFs
-NLP_Path  = './XRP20_NLP'                               # PATH TO NPL OUTPUTS
-Remv_Prog_File = './nlp_words - xrp.csv'                # NLP WORDS TO REMOVE
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
+NLP_Path  = '../panels/XRP20_NLP'                                         # PATH TO NPL OUTPUTS
+Remv_Prog_File = '../panels/nlp_words - xrp.csv'                          # NLP WORDS TO REMOVE
 
 ### GENERAL INPUTS THAT USUALLY DON'T CHANGE
-Page_Lim  = 15                                          # PROPOSAL PAGE LIMIT
-ExpMult  = 3                                            # CUTOFF FOR EXPNENTIAL DROP
-Lemm_File = './nlp_words - lemmatize.csv'               # ASTRO LEMMATIZE WORDS
-Remv_File = './nlp_words - stop.csv'                    # NLP WORDS TO REMOVE
+Page_Lim  = 15                                                  # PROPOSAL PAGE LIMIT
+ExpMult  = 3                                                    # CUTOFF FOR EXPNENTIAL DROP
+Lemm_File = '../panels/nlp_words - lemmatize.csv'               # ASTRO LEMMATIZE WORDS
+Remv_File = '../panels/nlp_words - stop.csv'                    # NLP WORDS TO REMOVE
 
 
 # ====================== Main Code ========================
@@ -329,11 +374,15 @@ if Process_Proposals:
 
     ### GRAB INFO IF IT DOESN'T ALREADY EXIST
     PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
-    Files, WC_All, WC_Clean, Text_All, Vocab_All, MC_All, MC_Top, Files_Skip  = [], [], [], [], [], [], [], []
+    Files, WC_All, WC_Clean, Text_All, Vocab_All, MC_All, MC_Top, Files_Skip, ML_Count  = [], [], [], [], [], [], [], [], []
     for p, pval in enumerate(PDF_Files):
 
-        ### OPEN PDF FILE
+        ### GET PDF FILE NAME
         Prop_Name = (pval.split('/')[-1]).split('.pdf')[0]
+        if Prop_Name in ["18-XRP18_2-0033-Fischer"]:
+            continue
+
+        ### OPEN PDF FILE
         Doc = fitz.open(pval)
         print(colored("\n\n\n\t" + Prop_Name, 'green', attrs=['bold']))
 
@@ -382,6 +431,7 @@ if Process_Proposals:
         PreFix = 'pp_rf' + str(RFlag).zfill(2) + '_' + pval.split('/')[-1][0:-4]
         top = plot_top(PreFix, NLP_Path, len(Text_Split), MC, MCB, ExpMult)
         if (len(Text_Clean) > 1000) & (not any('�' in word for word in top)):
+
             Text_All.append(Text_Clean)
             WC_All.append(len(Text_Split))
             WC_Clean.append(len(Text_Clean))
@@ -389,6 +439,11 @@ if Process_Proposals:
             MC_Top.append(top.tolist())
             Vocab_All = Vocab_All + Text_Clean
             # np.save(os.path.join(NLP_Path, PreFix + '.npy'), top)
+
+            ### CHECK IF ML MENTIONED
+            ml_words = ["machine learning", "deep learning", "artificial intelligence"]
+            ML_Count.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in ml_words])))
+
         else:
             Files_Skip.append(pval)
             print("\n\t!!!!!!!!!DID NOT SAVE!!!!!!!!!!!!!!!!")
@@ -451,8 +506,8 @@ if Make_LDA_Models:
     Dict.save(os.path.join(NLP_Path, PreFixLDA + 'dict.gensim'))
     LDAM.save(os.path.join(NLP_Path, PreFixLDA + 'model5.gensim'))
 
-    ### FIND A CATEGORY FOR A DOC (95 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann)
-    idx = 9
+    ### FIND A CATEGORY FOR A DOC (0 Boss, 95 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
+    idx = -3
     dd = Dict.doc2bow(Text_All[idx])
     # cc = [Dict.doc2bow(text) for text in Text_All]
     print("\n")
