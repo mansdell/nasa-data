@@ -31,7 +31,7 @@ def get_text(d, pn):
 
     """
     PURPOSE:   extract text from a given page of a PDF document
-    INPUTS:    d = fitz Document object
+    INPUTS:    d  = fitz Document object
                pn = page number to read (int)
     OUTPUTS:   t  = text of page (str)
 
@@ -101,7 +101,7 @@ def get_pages(d, pl=15):
         ps += 1
         pe += 1
 
-    ### CHECK THAT PAGE AFTER pe IS REFERENCES
+    ### CHECK THAT PAGE AFTER END PAGE IS REFERENCES
     Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
     if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
 
@@ -135,6 +135,14 @@ def get_pages(d, pl=15):
 
 def get_fonts(doc, pn):
 
+    """
+    PURPOSE:   get font sizes used in the proposal
+    INPUTS:    doc = fitz Document object
+               pn  = page number to grab fonts for
+    OUTPUTS:   df  = dictionary with font sizes, types, colors, and associated text
+
+    """
+
     ### LOAD PAGE
     page = doc.loadPage(int(pn))
 
@@ -164,18 +172,20 @@ def get_phd_data(doc, ps, pi):
 
     """
 
-    Finds line in PI's CV with PhD info 
-    Assumes first CV in proposal in for the PI
-    Searches for the words "phd" and grabs nearby information that contains digits
-    Assumes those digits are a year
-    Returns empty list [] if no information found
+    PURPOSE:   finds line(s) in PI's CV with PhD info 
+               assumes PI's CV is the first in proposal and format is YYYY
+    INPUTS:    doc = fitz Document object
+               ps  = start page of end material (int)
+               pi  = name of PI (str)
+    OUTPUTS:   returns potential text containing PhD year (list of str)
+               returns empty list [] if no information found
 
     """
 
     ### OPEN LOG FOR PHD DATA
     phd_data = []
 
-    ### WORDS TO IDENTIFY CV OR PDH
+    ### WORDS TO IDENTIFY CV OR PhD
     cv_words = ["curriculum", "vitae", "biographic", "sketches", "cv", "education", "professional"]
     phd_words = ["phd", "ph.d", "d.phil", "philosophy", "dr.rer.nat."]
 
@@ -198,18 +208,12 @@ def get_phd_data(doc, ps, pi):
         ### FIND PI's CV IN PROPOSAL
         if (any([x in text for x in cv_words])) & (pi in text[0:int(len(text)/4)]):
 
-            ### ADVANCED: USE STRUCTURE OF PDF PAGE
+            ### USE STRUCTURE OF PDF PAGE
             page = doc.loadPage(int(val))
             blocks = page.getText("dict", flags=11)["blocks"]
             for b in blocks:
                 for l, lval in enumerate(b["lines"]):
                     for s, sval in enumerate(lval["spans"]):
-
-                        # if (val == 48) & ("Ph.D.att" in sval["text"]) :
-                        # # if (val == 48) :
-                        #     print(sval["text"])
-                        #     print("")
-                        #     pdb.set_trace()
 
                         ### CHECK IN PHD MENTION:
                         if any([x in sval["text"].lower().replace(" ","") for x in phd_words]):
@@ -256,7 +260,7 @@ def get_phd_data(doc, ps, pi):
                             #     pdb.set_trace()
 
             ## SIMPLE: JUST GRAB WHATEVER TEXT IS AROUND MENTION OF PHD (IN FIRST HALF OF CV)    
-            ### NEED TO MAKE SMARTER SO DOESN'T TAKE NEARBY YEAR THAT IS MORE RECENT        
+            ### [THIS SIMPLE APPROACH OFTEN GRABS THE WRONG DATE]       
             # if len(phd_data) == 0:
 
             #     ### ONLY GET TEXT IN FIRST HALF OF CV
@@ -269,10 +273,6 @@ def get_phd_data(doc, ps, pi):
             #             phd_data.append(text[x-100:x+100].replace('\n',' '))
             #             print("TESTING")
 
-            # if val == 43:
-            #     print(phd_data)
-            #     pdb.set_trace()
-
             if len(phd_data) > 0:
                 return phd_data
 
@@ -280,6 +280,14 @@ def get_phd_data(doc, ps, pi):
 
 
 def guess_phd_year(info):
+
+    """
+    PURPOSE:   guess the PhD year of PI
+    INPUTS:    info grabbed from proposal by get_phd_data (list of str or None)
+    OUTPUTS:   yr_guess = best-guess of PhD year of PI (str or None)
+               yrs = all years extracted (list of str or None)
+
+    """
 
     ### LOOK AT EACH STRING OF PHD INFO PULLED FROM CV
     yrs = []
@@ -333,9 +341,10 @@ def guess_phd_year(info):
 
 # ====================== Set Inputs =======================
 
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
-Out_Path  = '../panels/XRP20_Fonts'                                       # PATH TO OUTPUT
-Guess_PhD = False                                                         # GUESS PHD YEAR FROM CV?
+PDF_Path  = './Proposal_PDFs'        # PATH TO PROPOSAL PDFs
+Out_Path  = './Proposal_Checks'      # PATH TO OUTPUT
+Guess_PhD = True                     # GUESS PHD YEAR FROM CV?
+
 
 # ====================== Main Code ========================
 
@@ -343,12 +352,12 @@ PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 Prop_Name_All, PhD_Year_All, PhD_Info_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
-    ### OPEN PDF FILE
+    ### OPEN PDF FILE (ASSUMES NAMING CONVENSION LIKE: YY-PRGYY-NNNN-Ansdell)
     Prop_Name = (pval.split('/')[-1]).split('.pdf')[0]
     Doc = fitz.open(pval)
     print(colored("\n\n\n\t" + Prop_Name, 'green', attrs=['bold']))
 
-    ### GET PI NAME (ASSUMES FORMAT OF NAMES!!!)
+    ### GET PI NAME
     PI_Name = ((pval.split('/')[-1]).split('.pdf')[0]).split('-')[-1]
 
     ### GET PAGES OF PROPOSAL (DOES NOT ACCOUNT FOR ZERO INDEXING; NEED TO ADD 1 WHEN PRINTING)
