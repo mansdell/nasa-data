@@ -1,20 +1,9 @@
 """
 
-Non-standard packages that must be installed for code to run:
-
-    - pip install pymupdf
-
-Tips for interpreting code otuput:
-
-    - Font only checks median font; check output histograms for all font sizes used in proposal
-    - If lots of CPI violations but not small font, check if PDF reading in text correctly (e.g., spaces between each letter)
-    - Page limit warnings often tricked by summaries/abstracts at start of proposal; double check these
-
-TO DO:
-
-    - try chardet to auto detect encodings: https://chardet.readthedocs.io/en/latest/usage.html
+Script to read and analyze data in NSPIRES-formatted PDF
 
 """
+
 
 # ============== Import Packages ================
 
@@ -24,9 +13,9 @@ import pandas as pd
 
 import textwrap
 from termcolor import colored
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import seaborn as sns
 from matplotlib.patches import Rectangle
 
 import fitz 
@@ -35,13 +24,14 @@ from collections import Counter
 import datetime
 import unicodedata
 
+
 # ============== Define Functions ===============
 
 def get_text(d, pn):
 
     """
-    PURPOSE:   extract text from a PDF document
-    INPUTS:    d = PDF document file from fitz
+    PURPOSE:   extract text from a given page of a PDF document
+    INPUTS:    d = fitz Document object
                pn = page number to read (int)
     OUTPUTS:   t  = text of page (str)
 
@@ -56,22 +46,23 @@ def get_text(d, pn):
     return t
 
 
-def get_pages(d, pl):
+def get_pages(d, pl=15):
 
     """
-    PURPOSE:   find start and end pages of proposal text
-               [assumes TOC after budget & authors used full page limit]
-    INPUTS:    d  = PDF document file from fitz
-               pl = page limit of call
-    OUTPUTS:   pn = number of pages
-               ps = start page number
-               pe = end page number
+    PURPOSE:   find start and end pages of proposal within NSPIRES-formatted PDF
+               [assumes proposal starts after budget, and references at end of proposal]
+    INPUTS:    d  = fitz Document object
+               pl = page limit of proposal (int; default = 15)
+    OUTPUTS:   pn = number of pages of proposal (int)
+               ps = start page number (int)
+               pe = end page number (int)
 
     """
 
-    ### GET NUMBER OF PAGES
+    ### GET TOTAL NUMBER OF PAGES IN PDF
     pn = d.pageCount
 
+    ### WORDS THAT INDICATE EXTRA STUFF BEFORE PROPOSAL STARTS
     check_words = ["contents", "c o n t e n t s", "budget", "cost", "costs",
                    "submitted to", "purposely left blank", "restrictive notice"]
 
@@ -83,7 +74,7 @@ def get_pages(d, pl):
         t1 = get_text(d, val)
         t2 = get_text(d, val + 1)
         
-        ### FIND PROPOSAL START USING END OF SECTION X
+        ### FIND PROPOSAL START USING END OF SECTION X IN NSPIRES
         if ('SECTION X - Budget' in t1) & ('SECTION X - Budget' not in t2):
 
             ### SET START PAGE
@@ -94,23 +85,23 @@ def get_pages(d, pl):
                 ps += 1
                 t2 = get_text(d, val + 2)
 
-            ### ACCOUNT FOR TOC OR SUMMARIES
+            ### ATTEMP TO ACCOUNT FOR TOC OR EXTRA SUMMARIES
             if any([x in t2.lower() for x in check_words]):
                 ps += 1
 
-            ### ASSUMES AUTHORS USED FULL PAGE LIMIT
+            ### SET END PAGE ASSUMING AUTHORS USED FULL PAGE LIMIT
             pe  = ps + (pl - 1) 
                         
         ### EXIT LOOP IF START PAGE FOUND
         if ps != 0:
             break 
 
-    ### ATTEMPT TO CORRECT FOR TOC > 1 PAGE OR SUMMARIES
+    ### ATTEMPT TO CORRECT FOR TOC > 1 PAGE OR SUMMARIES THAT WEREN'T CAUGHT ABOVE
     if any([x in get_text(d, ps).lower() for x in check_words]):
         ps += 1
         pe += 1
 
-    ### CHECK THAT PAGE AFTER LAST IS REFERENCES
+    ### CHECK THAT PAGE AFTER pe IS REFERENCES
     Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
     if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
 
@@ -133,11 +124,11 @@ def get_pages(d, pl):
     ### PRINT TO SCREEN (ACCOUNTING FOR ZERO-INDEXING)
     print("\n\tTotal pages = {},  Start page = {},   End page = {}".format(pn, ps + 1, pe + 1))
 
-    ### PRINT IF WENT OVER PAGE LIMIT
-    if pe - ps > 14:
-        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- OVER !!!!!", 'blue'))
-    if pe - ps < 13:
-        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- UNDER !!!!!", 'blue'))
+    # ## PRINT WARNING IF WENT OVER PAGE LIMIT (THIS WASN'T VERY RELIABLE)
+    # if pe - ps > 14:
+    #     print(colored("\n\t!!!!! PAGE LIMIT WARNING -- OVER !!!!!", 'blue'))
+    # if pe - ps < 13:
+    #     print(colored("\n\t!!!!! PAGE LIMIT WARNING -- UNDER !!!!!", 'blue'))
 
     return pn, ps, pe
 
@@ -147,7 +138,7 @@ def get_fonts(doc, pn):
     ### LOAD PAGE
     page = doc.loadPage(int(pn))
 
-    ### READ PAGE TEXT AS DICTIONARY
+    ### READ PAGE TEXT AS DICTIONARY (BLOCKS == PARAGRAPHS)
     blocks = page.getText("dict", flags=11)["blocks"]
 
     ### ITERATE THROUGH TEXT BLOCKS
@@ -167,6 +158,7 @@ def get_fonts(doc, pn):
 
     return df
             
+
 
 def get_phd_data(doc, ps, pi):
 
@@ -202,11 +194,6 @@ def get_phd_data(doc, ps, pi):
         pi = pi.lower()
         pi = pi.replace(' ', '')
         pi = pi.replace('_', '')
-
-        # if val == 48:
-        #     print(pi in text[0:int(len(text)/4)])
-        #     print(any([x in text for x in cv_words]))
-        #     pdb.set_trace()
 
         ### FIND PI's CV IN PROPOSAL
         if (any([x in text for x in cv_words])) & (pi in text[0:int(len(text)/4)]):
@@ -346,18 +333,15 @@ def guess_phd_year(info):
 
 # ====================== Set Inputs =======================
 
-PDF_Path  = './EW20_Proposals'                         # PATH TO PROPOSAL PDFs
-Out_Path  = './EW20_Fonts'                             # PATH TO OUTPUT
-Page_Lim  = 15                                          # PROPOSAL PAGE LIMIT
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
+Out_Path  = '../panels/XRP20_Fonts'                                       # PATH TO OUTPUT
+Guess_PhD = False                                                         # GUESS PHD YEAR FROM CV?
 
 # ====================== Main Code ========================
 
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 Prop_Name_All, PhD_Year_All, PhD_Info_All = [], [], []
 for p, pval in enumerate(PDF_Files):
-    
-    # if p < 115:
-    #     continue
 
     ### OPEN PDF FILE
     Prop_Name = (pval.split('/')[-1]).split('.pdf')[0]
@@ -369,7 +353,7 @@ for p, pval in enumerate(PDF_Files):
 
     ### GET PAGES OF PROPOSAL (DOES NOT ACCOUNT FOR ZERO INDEXING; NEED TO ADD 1 WHEN PRINTING)
     try:
-        Page_Num, Page_Start, Page_End = get_pages(Doc, Page_Lim)
+        Page_Num, Page_Start, Page_End = get_pages(Doc)
     except RuntimeError:
         print("\tCould not read PDF")
         print(colored("\n\t!!!!!!!!!DID NOT SAVE!!!!!!!!!!!!!!!!", "orange"))
@@ -406,7 +390,7 @@ for p, pval in enumerate(PDF_Files):
     if (MFS <= 11.8) | (CPC > 1):
         print(colored("\n\t!!!!! COMPLIANCE WARNING!!!!!", 'red'))
 
-    ### PLOT 
+    ### PLOT HISTOGRAM OF FONTS
     mpl.rc('xtick', labelsize=10)
     mpl.rc('ytick', labelsize=10)
     mpl.rc('xtick.major', size=5, pad=7, width=2)
@@ -425,19 +409,14 @@ for p, pval in enumerate(PDF_Files):
     fig.savefig(os.path.join(Out_Path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     plt.close('all')
 
-    ### GET PHD INFO AND YAER
-    PhD_Info = get_phd_data(Doc, Page_End, PI_Name)
-    PhD_Year, _ = guess_phd_year(PhD_Info)
-    # pdb.set_trace()
+    ### GUESS PHD YEAR FROM CV
+    if Guess_PhD:
 
-    ### SAVE STUFF
-    PhD_Year_All.append(PhD_Year)
-    PhD_Info_All.append(PhD_Info)
-    Prop_Name_All.append(Prop_Name)
+        ### GET PHD INFO AND YAER
+        PhD_Info = get_phd_data(Doc, Page_End, PI_Name)
+        PhD_Year, _ = guess_phd_year(PhD_Info)
 
-# from astropy.table import Table
-# t = Table()
-# t['Name'] = Prop_Name_All
-# t['Year'] = PhD_Year_All
-# t.write('tmp.csv', format='csv')
-
+        ### SAVE STUFF
+        PhD_Year_All.append(PhD_Year)
+        PhD_Info_All.append(PhD_Info)
+        Prop_Name_All.append(Prop_Name)
