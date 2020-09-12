@@ -24,6 +24,8 @@ from collections import Counter
 import datetime
 import unicodedata
 
+# from pyzipcode import ZipCodeDatabase
+import gender_guesser.detector as gender
 
 # ============== Define Functions ===============
 
@@ -138,7 +140,7 @@ def get_fonts(doc, pn):
     """
     PURPOSE:   get font sizes used in the proposal
     INPUTS:    doc = fitz Document object
-               pn  = page number to grab fonts for
+               pn  = page number to grab fonts (int)
     OUTPUTS:   df  = dictionary with font sizes, types, colors, and associated text
 
     """
@@ -171,7 +173,6 @@ def get_fonts(doc, pn):
 def get_phd_data(doc, ps, pi):
 
     """
-
     PURPOSE:   finds line(s) in PI's CV with PhD info 
                assumes PI's CV is the first in proposal and format is YYYY
     INPUTS:    doc = fitz Document object
@@ -339,93 +340,179 @@ def guess_phd_year(info):
     return None, None
 
 
-# ====================== Set Inputs =======================
+def get_proposal_info(doc):
 
-PDF_Path  = './Proposal_PDFs'        # PATH TO PROPOSAL PDFs
-Out_Path  = './Proposal_Checks'      # PATH TO OUTPUT
-Guess_PhD = True                     # GUESS PHD YEAR FROM CV?
+    """
+    PURPOSE:   grab PI name and proposal number from cover page
+    INPUTS:    doc  = fitz Document object
+    OUTPUTS:   pi_first = PI first name (str)
+               pi_last = PI last name (str)
+               pn = proposal number assigned by NSPIRES (str)
+
+    """
+
+    ### GET COVER PAGE
+    cp = get_text(doc, 0)
+
+    ### GET PI NAME
+    pi_name = ((cp[cp.index('Principal Investigator'):cp.index('E-mail Address')]).split('\n')[1]).split(' ')
+    pi_first, pi_last = pi_name[0], pi_name[-1]
+
+    ### GET PROPOSAL NUMBER
+    pn = ((cp[cp.index('Proposal Number'):cp.index('NASA PROCEDURE FOR')]).split('\n')[1]).split(' ')[0]
+
+    return pi_first, pi_last, pn
+
+
+def check_compliance(doc, ps, pe):
+
+    """
+    PURPOSE:   check font size and counts-per-inch 
+    INPUTS:    doc = fitz Document object
+               ps  = start page of proposal (int)
+               pe  = end page of proposals (int)
+    OUTPUTS:   mfs = median font size of proposal (int)
+  
+    """
+
+    ### GRAB FONT SIZE & CPI
+    cpi = []
+    for i, val in enumerate(np.arange(ps, pe)):
+        cpi.append(len(get_text(doc, val)) / 44 / 6.5)
+        if i ==0:
+            df = get_fonts(doc, val)
+        else:
+            df = df.append(get_fonts(doc, val), ignore_index=True)
+    cpi = np.array(cpi)
+
+    ### MEDIAN FONT SIZE (PRINT WARNING IF LESS THAN 12 PT)
+    ### only use text > 50 characters (excludes random smaller text; see histograms for all)
+    mfs = round(np.median(df[df['Text'].apply(lambda x: len(x) > 50)]["Size"]), 1)  
+    if mfs <= 11.8:
+        print("\n\tMedian font size:\t", colored(str(mfs), 'yellow'))
+    else:
+        print("\n\tMedian font size:\t" + str(mfs))
+
+    ### MOST COMMON FONT TYPE USED
+    # cft = Counter(df['Font'].values).most_common(1)[0][0]
+    # print("\n\tMost common font:\t" + cft)
+
+    # ### COUNTS PER INCH
+    # CPC, CPI = len(cpi[cpi > 15.5]), [round(x, 1) for x in cpi[cpi > 15.5]]
+    # if CPC > 1:
+    #     print("\tPages with CPI > 15.5:\t", textwrap.shorten(colored((np.arange(ps, pe)[cpi > 15.5] + 1).tolist(), 'yellow'), 70))
+    #     print("\t\t\t\t", textwrap.shorten(colored(CPI, 'yellow'), 70))
+    # if (MFS <= 11.8) | (CPC > 1):
+    #     print(colored("\n\t!!!!! COMPLIANCE WARNING!!!!!", 'red'))
+
+    # ### PLOT HISTOGRAM OF FONTS
+    # mpl.rc('xtick', labelsize=10)
+    # mpl.rc('ytick', labelsize=10)
+    # mpl.rc('xtick.major', size=5, pad=7, width=2)
+    # mpl.rc('ytick.major', size=5, pad=7, width=2)
+    # mpl.rc('xtick.minor', width=2)
+    # mpl.rc('ytick.minor', width=2)
+    # mpl.rc('axes', linewidth=2)
+    # mpl.rc('lines', markersize=5)
+    # fig = plt.figure(figsize=(6, 4))
+    # ax = fig.add_subplot(111)
+    # ax.set_title(Prop_Name + "   Median Font = " + str(MFS) + "pt    CPI = " + str(round(np.median(cpi[cpi > 8]), 1)), size=11)
+    # ax.set_xlabel('Font Size', size=10)
+    # ax.set_ylabel('Density', size=10)
+    # ax.axvspan(11.8, 12.2, alpha=0.5, color='gray')
+    # ax.hist(df["Size"], bins=np.arange(5.4, 18, 0.4), density=True)
+    # fig.savefig(os.path.join(out_path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
+    # plt.close('all')
+
+    return mfs
+
+
+def get_demographics(doc, pi_first):
+
+    """
+    PURPOSE:   grab and/or guess demographic information from cover page
+    INPUTS:    doc  = fitz Document object
+               pi_first = PI first name (str)
+    OUTPUTS:   gndr = guessed gender of PI based on first name (str)
+               org_code = organization code of PI (str)
+               zip_code = zip code of PI (int)
+
+    """
+
+    ### GET COVER PAGE
+    cp = get_text(doc, 0)
+
+    ### GUESS GENDER BASED ON FIRST NAME
+    gdDB = gender.Detector()
+    gndr = gdDB.get_gender(pi_first.title())
+
+    ### GRAB ORG TYPE FROM COVER PAGE
+    org_code = (cp[cp.index('Organization Type'):cp.index('Organization Name')]).split('\n')[1]
+
+    ### GRAB ZIP CODE FROM COVER PAGE 
+    zip_code = ((cp[cp.index('Postal Code'):cp.index('Country Code')]).split('\n')[1]).split('-')[0]
+
+    ### PRINT OUT
+    print(f'\n\tGender (Guess):\t\t{gndr} ({pi_first})')
+    print(f'\tZipcode:\t\t{zip_code}')
+
+    return gndr, org_code, zip_code
 
 
 # ====================== Main Code ========================
 
+### SET IN/OUT PATHS
+PDF_Path  = '../panels/XRP20_Proposals'  
+Out_Path  = '../panels/XRP20_Output' 
+
+### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
-Prop_Name_All, PhD_Year_All, PhD_Info_All = [], [], []
+
+### ARRAYS TO FILL
+Prop_Nb_All, PI_Last_All, Files_Skipped, Font_All = [], [], [], []
+PhD_Year_All, Zipcode_All, Gender_All, Org_All = [], [], [], []
+
+### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
-    ### OPEN PDF FILE (ASSUMES NAMING CONVENSION LIKE: YY-PRGYY-NNNN-Ansdell)
-    Prop_Name = (pval.split('/')[-1]).split('.pdf')[0]
+    ### OPEN PDF DOCUMENT
     Doc = fitz.open(pval)
-    print(colored("\n\n\n\t" + Prop_Name, 'green', attrs=['bold']))
 
-    ### GET PI NAME
-    PI_Name = ((pval.split('/')[-1]).split('.pdf')[0]).split('-')[-1]
+    ### GET PI NAME AND PROPOSAL NUMBER
+    PI_First, PI_Last, Prop_Nb = get_proposal_info(Doc)
+    print(colored(f'\n\n\n\t{Prop_Nb}\t{PI_Last}', 'green', attrs=['bold']))
 
-    ### GET PAGES OF PROPOSAL (DOES NOT ACCOUNT FOR ZERO INDEXING; NEED TO ADD 1 WHEN PRINTING)
+    ### GET PAGES OF S/T/M PROPOSAL (PRINT SOME TEXT TO CHECK)
     try:
         Page_Num, Page_Start, Page_End = get_pages(Doc)
+        print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[100:130]), 40))
+        print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[100:130]), 40))
+        print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[100:130]), 40))   
     except RuntimeError:
-        print("\tCould not read PDF")
-        print(colored("\n\t!!!!!!!!!DID NOT SAVE!!!!!!!!!!!!!!!!", "orange"))
+        print("\tCould not read PDF, did not save")
         Files_Skipped.append(pval)
         continue
 
-    ### GET TEXT OF FIRST PAGE TO CHECK
-    print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[100:130]), 40))
-    print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[100:130]), 40))
-    print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[100:130]), 40))
-            
-    ### GRAB FONT SIZE & CPI
-    cpi = []
-    for i, val in enumerate(np.arange(Page_Start, Page_End)):
-        cpi.append(len(get_text(Doc, val)) / 44 / 6.5)
-        if i ==0:
-            df = get_fonts(Doc, val)
-        else:
-            df = df.append(get_fonts(Doc, val), ignore_index=True)
-    cpi = np.array(cpi)
-
-    ### PRINT WARNINGS IF NEEDED (typical text font < 11.8 or CPI > 15.5 on > 1 page)
-    CMF = Counter(df['Font'].values).most_common(1)[0][0]
-    MFS = round(np.median(df[df['Text'].apply(lambda x: len(x) > 50)]["Size"]), 1)  ## only use text > 50 characters (excludes random smaller text; see histograms for all)
-    CPC, CPI = len(cpi[cpi > 15.5]), [round(x, 1) for x in cpi[cpi > 15.5]]
-    print("\n\tMost common font:\t" + CMF)
-    if MFS <= 11.8:
-        print("\tMedian font size:\t", colored(str(MFS), 'yellow'))
-    else:
-        print("\tMedian font size:\t" + str(MFS))
-    if CPC > 1:
-        print("\tPages with CPI > 15.5:\t", textwrap.shorten(colored((np.arange(Page_Start, Page_End)[cpi > 15.5] + 1).tolist(), 'yellow'), 70))
-        print("\t\t\t\t", textwrap.shorten(colored(CPI, 'yellow'), 70))
-    if (MFS <= 11.8) | (CPC > 1):
-        print(colored("\n\t!!!!! COMPLIANCE WARNING!!!!!", 'red'))
-
-    ### PLOT HISTOGRAM OF FONTS
-    mpl.rc('xtick', labelsize=10)
-    mpl.rc('ytick', labelsize=10)
-    mpl.rc('xtick.major', size=5, pad=7, width=2)
-    mpl.rc('ytick.major', size=5, pad=7, width=2)
-    mpl.rc('xtick.minor', width=2)
-    mpl.rc('ytick.minor', width=2)
-    mpl.rc('axes', linewidth=2)
-    mpl.rc('lines', markersize=5)
-    fig = plt.figure(figsize=(6, 4))
-    ax = fig.add_subplot(111)
-    ax.set_title(Prop_Name + "   Median Font = " + str(MFS) + "pt    CPI = " + str(round(np.median(cpi[cpi > 8]), 1)), size=11)
-    ax.set_xlabel('Font Size', size=10)
-    ax.set_ylabel('Density', size=10)
-    ax.axvspan(11.8, 12.2, alpha=0.5, color='gray')
-    ax.hist(df["Size"], bins=np.arange(5.4, 18, 0.4), density=True)
-    fig.savefig(os.path.join(Out_Path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
-    plt.close('all')
+    ### CHECK FONT/TEXT COMPLIANCE
+    Font_Size = check_compliance(Doc, Page_Start, Page_End)
 
     ### GUESS PHD YEAR FROM CV
-    if Guess_PhD:
+    PhD_Info = get_phd_data(Doc, Page_End, PI_Last)
+    PhD_Year, _ = guess_phd_year(PhD_Info)
 
-        ### GET PHD INFO AND YAER
-        PhD_Info = get_phd_data(Doc, Page_End, PI_Name)
-        PhD_Year, _ = guess_phd_year(PhD_Info)
+    ### DEMOGRAPHIC INFORMATION
+    PI_Gender, PI_Org, PI_Zip = get_demographics(Doc, PI_First)
 
-        ### SAVE STUFF
-        PhD_Year_All.append(PhD_Year)
-        PhD_Info_All.append(PhD_Info)
-        Prop_Name_All.append(Prop_Name)
+    ### SAVE STUFF
+    Prop_Nb_All.append(Prop_Nb)
+    PI_Last_All.append(PI_Last)
+    Font_All.append(Font_Size)
+    PhD_Year_All.append(PhD_Year)
+    Zipcode_All.append(PI_Zip)
+    Gender_All.append(PI_Gender)
+    Org_All.append(PI_Org)
+
+d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'Font_Size': Font_All, 
+     'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All}
+df = pd.DataFrame(data=d)
+df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
