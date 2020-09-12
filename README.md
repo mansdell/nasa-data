@@ -12,7 +12,7 @@ Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
 [gender-guesser](https://pypi.org/project/gender-guesser/): only needed for one part of for check_proposals.py
 
-# Outputs
+# Description
 
 ### check_proposals.py
 
