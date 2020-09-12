@@ -10,6 +10,8 @@ Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
 [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/): a useful package for importing PDF text (which confusingly is imported as "import fitz")
 
+[gender-guesser](https://pypi.org/project/gender-guesser/): only needed for one part of for check_proposals.py
+
 # Outputs
 
 ### check_proposals.py
