@@ -14,21 +14,24 @@ Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
 ### check_proposals.py
 
-This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, attempts to find the "Scientific / Technical / Management" section (hereafter "the proposal"), and then grabs/checks a variety of useful things. These things are described below with tips on how to interpret the code output.
+This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, attempts to find the "Scientific / Technical / Management" section (hereafter "the proposal"), and then grabs/checks a variety of useful things that are output into a csv file. These things are described below with tips on how to interpret the code output.
 
-* Start and end pages of the proposal
-  - ROSES proposals are nominally 15 pages, but can start/end on different pages in an NSPIRES-formatted PDF
-  - The extracted start/end pages are correct for ~95% of cases (in off cases, extra pages that include, e.g., extended abstracts and TOCs, may be included)
-  - Only the text within these limits is considered in the rest of the code
-
-* Font size
-  - The median font size used in the proposal is calculated, and a warning is given when <=11.8 pt (e.g., for checking compliance)
-  - A histogram of the font sizes (based on each PDF ["span"](https://pymupdf.readthedocs.io/en/latest/faq.html#how-to-analyze-font-characteristics)) is also saved to the specified output directory
+* PI name and proposal number
+  - These are taken from the cover page of the NSPIRES-formatted PDF
   
-* PhD Year
+* Font size (useful for checking compliance)
+  - The median font size used in the proposal is calculated, and a warning is given when <=11.8 pt (e.g., for checking compliance)
+  - A histogram of the font sizes (based on each PDF ["span"](https://pymupdf.readthedocs.io/en/latest/faq.html#how-to-analyze-font-characteristics)) can be saved to the specified output directory
+  
+* PhD Year (useful for identifying early career proposers)
   - The PhD year of the PI is extracted from the CV that is included within the PDF after the main proposal 
   - When extracted, the PhD year is correct in ~95% of cases (in some cases, no PhD year can be found)
+  - Useful for identfy
 
+* Demographic information
+  - Guessed gender of the PI based on the first name
+  - Zipcode of the PI 
+  - Organizational code from NSPIRES 
 
 ### group_proposals.py
 
