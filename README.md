@@ -27,7 +27,7 @@ This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, atte
   
 * PhD Year (useful for identifying early career proposers)
   - The PhD year of the PI is extracted from the CV that is included within the PDF after the main proposal 
-  - When extracted, the PhD year is correct in >= 95% of cases (in some cases, no PhD year can be found)
+  - When extracted, the PhD year is correct in ~95% of cases (in some cases, no PhD year can be found)
 
 * Demographic information
   - Guessed gender of the PI based on the first name
