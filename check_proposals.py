@@ -24,7 +24,6 @@ from collections import Counter
 import datetime
 import unicodedata
 
-# from pyzipcode import ZipCodeDatabase
 import gender_guesser.detector as gender
 
 # ============== Define Functions ===============
@@ -44,6 +43,9 @@ def get_text(d, pn):
 
     ### GET RAW TEXT
     t = p.getText("text")
+
+    ### FIX ENCODING
+    t = t.encode('utf-8', 'replace').decode()
     
     return t
 
@@ -184,10 +186,10 @@ def get_phd_data(doc, ps, pi):
     """
 
     ### OPEN LOG FOR PHD DATA
-    phd_data = []
+    phd_data, phd_flag = [], []
 
     ### WORDS TO IDENTIFY CV OR PhD
-    cv_words = ["curriculum", "vitae", "biographic", "sketches", "cv", "education", "professional"]
+    cv_words = ["curriculum", "vitae", "biographic", "sketches", "cv", "education", "professional", "experience"]
     phd_words = ["phd", "ph.d", "d.phil", "philosophy", "dr.rer.nat."]
 
     ### LOOP THROUGH PDF PAGES
@@ -222,6 +224,7 @@ def get_phd_data(doc, ps, pi):
                             ### CHECK IF YEAR FOUND
                             if any(i.isdigit() for i in sval["text"]):
                                 phd_data.append(sval["text"])
+                                phd_flag.append(1)
                             
                             ### IF NOT, CHECK ALL OTHER SPANS IF NO YEAR FOUND
                             else:
@@ -229,10 +232,12 @@ def get_phd_data(doc, ps, pi):
                                 for c, cval in enumerate(ncheck):
                                     if any(i.isdigit() for i in lval["spans"][cval]["text"]):
                                         phd_data.append(lval["spans"][cval]["text"] + ' ' + sval["text"])
-       
+                                        phd_flag.append(2)
+
                             ### IF NOT, CHECK LINES JUST BEFORE/AFTER MENTION FOR YEAR
                             dl = 2
-                            while (len(phd_data) == 0) & (dl < 8):
+                            while (len(phd_data) == 0) & (dl < 15):
+
                                 tmp = ''
                                 ncheck = np.arange( np.max([0, l-dl]), np.min([len(b["lines"]), l+dl]) )
                                 for c, cval in enumerate(ncheck):
@@ -243,11 +248,11 @@ def get_phd_data(doc, ps, pi):
                                             tmp = tmp + ' ' + tmptmp
                                 if len(tmp) > 0:
                                     phd_data.append(tmp + ' ' + sval["text"])
+                                    phd_flag.append(3+dl)
                                 dl += 1
 
                             # ### CHECK EVEN FURTHER ONLY IF YEAR NOT FOUND YET
                             # if len(phd_data) == 0:
-
                             #     tmp = ''
                             #     ncheck = np.arange( np.max([0, l-3]), np.min([len(b["lines"]), l+3]) )
                             #     for c, cval in enumerate(ncheck):
@@ -257,8 +262,6 @@ def get_phd_data(doc, ps, pi):
                             #     if len(tmp) > 0:
                             #         phd_data.append(tmp + ' ' + sval["text"])
 
-                            # if (val == 48) & ("Ph. D." in sval["text"]) :    
-                            #     pdb.set_trace()
 
             ## SIMPLE: JUST GRAB WHATEVER TEXT IS AROUND MENTION OF PHD (IN FIRST HALF OF CV)    
             ### [THIS SIMPLE APPROACH OFTEN GRABS THE WRONG DATE]       
@@ -273,14 +276,14 @@ def get_phd_data(doc, ps, pi):
             #         if any(i.isdigit() for i in text[x-100:x+100]):
             #             phd_data.append(text[x-100:x+100].replace('\n',' '))
             #             print("TESTING")
-
+            
             if len(phd_data) > 0:
-                return phd_data
+                return phd_data, phd_flag
 
-    return phd_data
+    return phd_data, phd_flag
 
 
-def guess_phd_year(info):
+def guess_phd_year(info, flag):
 
     """
     PURPOSE:   guess the PhD year of PI
@@ -309,8 +312,8 @@ def guess_phd_year(info):
         if len(ind_dd) > 0:
             tmp.append(pval[dd[ind_dd[-1]]:dd[-1]+1])
 
-        ### ONLY KEEP NUMBERS THAT ARE == 4 DIGITS
-        ind_keep = [i for (i,j) in enumerate(tmp) if len(j) == 4]
+        ### ONLY KEEP NUMBERS THAT ARE == 4 DIGITS AND START WITH 1 OR 2
+        ind_keep = [i for (i,j) in enumerate(tmp) if (len(j) == 4) & (1 <= int(j[0]) <=2)]
         tmp = np.array(tmp)[ind_keep].tolist()
 
         ### REMOVE FUTURE YEARS (TO CATCH EXPECTED PHDs)
@@ -326,14 +329,14 @@ def guess_phd_year(info):
 
         ### GUESS YEAR
         # yr_guess = str(np.max(np.array(yrs).astype(int)))   ### JUST TAKE MAX
-        yr_guess = yrs[0]                                   ### TAKE FIRST MENTION
+        yr_guess = yrs[0]                                     ### TAKE FIRST MENTION
         
         for p, pval in enumerate(info):
             if p == 0:
-                print("\n\tPhD Year (Guess):\t" + yr_guess)
-                print("\tPhD Text:\t\t" + info[p][0:40])
+                print(f"\n\tPhD Year (Guess):\t{yr_guess}")
+                print(f"\tPhD Text [{flag[p]}]:\t\t{info[p]}")
             else:
-                print("\t\t\t\t" + info[p][0:40])
+                print(f"\t\t\t\t{info[p]}")
 
         return yr_guess, yrs
 
@@ -385,6 +388,9 @@ def check_compliance(doc, ps, pe):
             df = df.append(get_fonts(doc, val), ignore_index=True)
     cpi = np.array(cpi)
 
+    if len(df) == 0:
+        return 0
+
     ### MEDIAN FONT SIZE (PRINT WARNING IF LESS THAN 12 PT)
     ### only use text > 50 characters (excludes random smaller text; see histograms for all)
     mfs = round(np.median(df[df['Text'].apply(lambda x: len(x) > 50)]["Size"]), 1)  
@@ -434,8 +440,9 @@ def get_demographics(doc, pi_first):
     INPUTS:    doc  = fitz Document object
                pi_first = PI first name (str)
     OUTPUTS:   gndr = guessed gender of PI based on first name (str)
-               org_code = organization code of PI (str)
+               org_type = organization type of PI (str)
                zip_code = zip code of PI (int)
+               coi = gender counts of coi's (str; {#male}_{#female})
 
     """
 
@@ -446,31 +453,54 @@ def get_demographics(doc, pi_first):
     gdDB = gender.Detector()
     gndr = gdDB.get_gender(pi_first.title())
 
-    ### GRAB ORG TYPE FROM COVER PAGE
-    org_code = (cp[cp.index('Organization Type'):cp.index('Organization Name')]).split('\n')[1]
-
     ### GRAB ZIP CODE FROM COVER PAGE 
     zip_code = ((cp[cp.index('Postal Code'):cp.index('Country Code')]).split('\n')[1]).split('-')[0]
 
+    # ### GRAB BUDGET
+    # bt = float((((cp[cp.index('Total Budget'):cp.index('Year 1 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+    # b1 = float((((cp[cp.index('Year 1 Budget'):cp.index('Year 2 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+    
     ### PRINT OUT
     print(f'\n\tGender (Guess):\t\t{gndr} ({pi_first})')
     print(f'\tZipcode:\t\t{zip_code}')
 
-    return gndr, org_code, zip_code
+    ### GRAB CO-I GENDERS FROM NEXT TWO COVER PAGES
+    coi_gndr = []
+    cp2 = get_text(doc, 1)
+    if "SECTION VI - Team Members" in get_text(doc, 2):
+        cp2 = cp2 + get_text(doc, 2)
+    while 'Co-I' in cp2:
+        cp2 = cp2[cp2.index('Co-I'):]
+        cn = ((cp2[cp2.index('Co-I'):cp2.index('Contact')]).split('\n')[-2]).split(' ')[0]
+        coi_gndr.append(gdDB.get_gender(cn.title()))
+        cp2 = cp2[cp2.index('Phone'):]
+    nm = coi_gndr.count('male') + coi_gndr.count('mostly_male')
+    nf = coi_gndr.count('female') + coi_gndr.count('mostly_female')
+    coi = f'{nm}_{nf}'
+
+    ### GRAB ORG TYPE
+    for i, val in enumerate(np.arange(20)):            
+        text = get_text(doc, val)        
+        if ('Question 2 : Type of institution' in text):
+            org_type = (((text[text.index('Question 2'):text.index('Question 3')]).split('\n')[-2]).split(':')[-1]).strip()
+    if org_type == '':
+        org_type = 'Not Specified'
+
+    return gndr, org_type, zip_code, coi
 
 
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/XRP20_Proposals'  
-Out_Path  = '../panels/XRP20_Output' 
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2018'  
+Out_Path  = '../panels/XRP20_Output/' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### ARRAYS TO FILL
-Prop_Nb_All, PI_Last_All, Files_Skipped, Font_All = [], [], [], []
-PhD_Year_All, Zipcode_All, Gender_All, Org_All = [], [], [], []
+Prop_Nb_All, PI_Last_All, Font_All = [], [], []
+PhD_Year_All, Zipcode_All, Gender_All, Org_All, CoI_Gender_All = [], [], [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
@@ -482,26 +512,27 @@ for p, pval in enumerate(PDF_Files):
     PI_First, PI_Last, Prop_Nb = get_proposal_info(Doc)
     print(colored(f'\n\n\n\t{Prop_Nb}\t{PI_Last}', 'green', attrs=['bold']))
 
-    ### GET PAGES OF S/T/M PROPOSAL (PRINT SOME TEXT TO CHECK)
+    ### GET PAGES OF S/T/M PROPOSAL
     try:
-        Page_Num, Page_Start, Page_End = get_pages(Doc)
-        print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[100:130]), 40))
-        print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[100:130]), 40))
-        print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[100:130]), 40))   
+        Page_Num, Page_Start, Page_End = get_pages(Doc)         
     except RuntimeError:
         print("\tCould not read PDF, did not save")
-        Files_Skipped.append(pval)
         continue
 
+    ### PRINT SOME TEXT TO CHECK
+    print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[100:130]), 40))
+    print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[100:130]), 40))
+    print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[100:130]), 40))  
+    
     ### CHECK FONT/TEXT COMPLIANCE
     Font_Size = check_compliance(Doc, Page_Start, Page_End)
 
     ### GUESS PHD YEAR FROM CV
-    PhD_Info = get_phd_data(Doc, Page_End, PI_Last)
-    PhD_Year, _ = guess_phd_year(PhD_Info)
+    PhD_Info, PhD_Flag = get_phd_data(Doc, Page_End, PI_Last)
+    PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Flag)
 
     ### DEMOGRAPHIC INFORMATION
-    PI_Gender, PI_Org, PI_Zip = get_demographics(Doc, PI_First)
+    PI_Gender, PI_Org, PI_Zip, CoI_Gender = get_demographics(Doc, PI_First)
 
     ### SAVE STUFF
     Prop_Nb_All.append(Prop_Nb)
@@ -511,8 +542,10 @@ for p, pval in enumerate(PDF_Files):
     Zipcode_All.append(PI_Zip)
     Gender_All.append(PI_Gender)
     Org_All.append(PI_Org)
+    CoI_Gender_All.append(CoI_Gender)
 
 d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'Font_Size': Font_All, 
-     'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All}
+     'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All,
+     'CoI_Gender': CoI_Gender_All}
 df = pd.DataFrame(data=d)
 df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
