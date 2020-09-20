@@ -456,10 +456,13 @@ def get_demographics(doc, pi_first):
     ### GRAB ZIP CODE FROM COVER PAGE 
     zip_code = ((cp[cp.index('Postal Code'):cp.index('Country Code')]).split('\n')[1]).split('-')[0]
 
-    # ### GRAB BUDGET
-    # bt = float((((cp[cp.index('Total Budget'):cp.index('Year 1 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
-    # b1 = float((((cp[cp.index('Year 1 Budget'):cp.index('Year 2 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
-    
+    ### GRAB BUDGET, IF AVAILABLE
+    try:
+        bt = float((((cp[cp.index('Total Budget'):cp.index('Year 1 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+        b1 = float((((cp[cp.index('Year 1 Budget'):cp.index('Year 2 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+    except ValueError:
+        bt, b1 = -99.0, -99.0
+
     ### PRINT OUT
     print(f'\n\tGender (Guess):\t\t{gndr} ({pi_first})')
     print(f'\tZipcode:\t\t{zip_code}')
@@ -486,20 +489,20 @@ def get_demographics(doc, pi_first):
     if org_type == '':
         org_type = 'Not Specified'
 
-    return gndr, org_type, zip_code, coi
+    return gndr, org_type, zip_code, coi, [bt, b1]
 
 
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2018'  
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2019'  
 Out_Path  = '../panels/XRP20_Output/' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### ARRAYS TO FILL
-Prop_Nb_All, PI_Last_All, Font_All = [], [], []
+Prop_Nb_All, PI_Last_All, Font_All, Budget_All = [], [], [], []
 PhD_Year_All, Zipcode_All, Gender_All, Org_All, CoI_Gender_All = [], [], [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
@@ -532,7 +535,7 @@ for p, pval in enumerate(PDF_Files):
     PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Flag)
 
     ### DEMOGRAPHIC INFORMATION
-    PI_Gender, PI_Org, PI_Zip, CoI_Gender = get_demographics(Doc, PI_First)
+    PI_Gender, PI_Org, PI_Zip, CoI_Gender, Budget = get_demographics(Doc, PI_First)
 
     ### SAVE STUFF
     Prop_Nb_All.append(Prop_Nb)
@@ -543,9 +546,10 @@ for p, pval in enumerate(PDF_Files):
     Gender_All.append(PI_Gender)
     Org_All.append(PI_Org)
     CoI_Gender_All.append(CoI_Gender)
+    Budget_All.append(Budget)
 
 d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'Font_Size': Font_All, 
      'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All,
-     'CoI_Gender': CoI_Gender_All}
+     'CoI_Gender': CoI_Gender_All, 'Budget_Total_Yr1': Budget_All}
 df = pd.DataFrame(data=d)
 df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
