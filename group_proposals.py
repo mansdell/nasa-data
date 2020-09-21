@@ -16,7 +16,6 @@ Things to do:
 5) Use WordNet to find synonyms (from nltk.corpus import wordnet)
 
 
-
 """
 
 # ============== Import Packages ================
@@ -61,8 +60,8 @@ import pyLDAvis.gensim
 def get_text(d, pn):
 
     """
-    PURPOSE:   extract text from a PDF document
-    INPUTS:    d = PDF document file from fitz
+    PURPOSE:   extract text from a given page of a PDF document
+    INPUTS:    d  = fitz Document object
                pn = page number to read (int)
     OUTPUTS:   t  = text of page (str)
 
@@ -73,20 +72,23 @@ def get_text(d, pn):
 
     ### GET RAW TEXT
     t = p.getText("text")
-    
+
+    ### FIX ENCODING
+    t = t.encode('utf-8', 'replace').decode()
+     
     return t
 
 
-def get_pages(d, pl):
+def get_pages(d, pl=15):
 
     """
-    PURPOSE:   find start and end pages of proposal text
-               [assumes TOC after budget & authors used full page limit]
-    INPUTS:    d  = PDF document file from fitz
-               pl = page limit of call
-    OUTPUTS:   pn = number of pages
-               ps = start page number
-               pe = end page number
+    PURPOSE:   find start and end pages of proposal within NSPIRES-formatted PDF
+               [assumes proposal starts after budget, and references at end of proposal]
+    INPUTS:    d  = fitz Document object
+               pl = page limit of proposal (int; default = 15)
+    OUTPUTS:   pn = number of pages of proposal (int)
+               ps = start page number (int)
+               pe = end page number (int)
 
     """
 
@@ -154,13 +156,31 @@ def get_pages(d, pl):
     ### PRINT TO SCREEN (ACCOUNTING FOR ZERO-INDEXING)
     print("\n\tTotal pages = {},  Start page = {},   End page = {}".format(pn, ps + 1, pe + 1))
 
-    ### PRINT IF WENT OVER PAGE LIMIT
-    if pe - ps > 14:
-        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- OVER !!!!!", 'blue'))
-    if pe - ps < 13:
-        print(colored("\n\t!!!!! PAGE LIMIT WARNING -- UNDER !!!!!", 'blue'))
-
     return pn, ps, pe
+
+
+def get_proposal_info(doc):
+
+    """
+    PURPOSE:   grab PI name and proposal number from cover page
+    INPUTS:    doc  = fitz Document object
+    OUTPUTS:   pi_first = PI first name (str)
+               pi_last = PI last name (str)
+               pn = proposal number assigned by NSPIRES (str)
+
+    """
+
+    ### GET COVER PAGE
+    cp = get_text(doc, 0)
+
+    ### GET PI NAME
+    pi_name = ((cp[cp.index('Principal Investigator'):cp.index('E-mail Address')]).split('\n')[1]).split(' ')
+    pi_first, pi_last = pi_name[0].title(), pi_name[-1].title()
+
+    ### GET PROPOSAL NUMBER
+    pn = ((cp[cp.index('Proposal Number'):cp.index('NASA PROCEDURE FOR')]).split('\n')[1]).split(' ')[0]
+
+    return pi_first, pi_last, pn
 
 
 def split_text(t):
@@ -236,11 +256,14 @@ def clean_text(t, lmf, rmf, rmf2=[]):
             t = list(filter((val).__ne__, t))
     else:
         rflag = 0
-    
+
+    ### REMOVE WORDS THAT CONTAIN IRREGULAR CHARACTERS
+    t = [x for x in t if len(re.findall(r'[^a-zA-Z0-9\._-]', x)) == 0 ]
+
     return t, rflag
 
 
-def plot_wc(opath, fn, wc_a, wc_c, nbins=25):
+def plot_wc(opath, fn, wc, nbins=25):
 
     ### SETUP PLOT
     mpl.rc('xtick', labelsize=10)
@@ -253,40 +276,29 @@ def plot_wc(opath, fn, wc_a, wc_c, nbins=25):
     mpl.rc('lines', markersize=5)
 
     ### SETUP AXES
-    fig, axs = plt.subplots(1, 2, sharey=True, tight_layout=True, figsize=(8, 4))
-    axs[0].set_title('All Words', size=10)
-    axs[1].set_title('Cleaned Words', size=10)
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.set_title('Distribution of Word Counts', size=10)
+    ax.set_xlabel('Number of Words in Proposal')
 
     ### GET MEDIAN AND ROBUST SIGMA OF DATA
-    mu_a, std_a = np.median(wc_a), mad_std(wc_a)
-    mu_c, std_c = np.median(wc_c), mad_std(wc_c)
+    mu, std = np.median(wc), mad_std(wc)
 
-    ### PLOT HISTOGRAM
-    na, ba, pa = axs[0].hist(wc_a, bins=nbins, density=True)
-    nc, bc, pc = axs[1].hist(wc_c, bins=nbins, density=True)
-
-    ### PLOT FITS
-    xf_a = np.linspace(0, np.max(wc_a) + 1000, 100)
-    yf_a = norm.pdf(xf_a, mu_a, std_a)
-    xf_c = np.linspace(0, np.max(wc_c) + 1000, 100)
-    yf_c = norm.pdf(xf_c, mu_c, std_c)
-    axs[0].plot(xf_a, yf_a, 'k')
-    axs[1].plot(xf_c, yf_c, 'k')
-    [axs[0].axvline(x, color='gray', linestyle=":") for x in [mu_a - std_a*2, mu_a + std_a*2]]
-    [axs[1].axvline(x, color='gray', linestyle=":") for x in [mu_c - std_c*2, mu_c + std_c*2]]
+    ### PLOT HISTOGRAM WITH GAUSSIAN FIT
+    na, ba, pa = ax.hist(wc, bins=nbins, density=True)
+    xf = np.linspace(0, np.max(wc) + 1000, 100)
+    yf = norm.pdf(xf, mu, std)
+    ax.plot(xf, yf, 'k')
+    [ax.axvline(x, color='gray', linestyle=":") for x in [mu - std*2, mu + std*2]]
 
     ### CLEANUP
     fig.savefig(os.path.join(opath, 'pp_wc_dist.pdf'), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     plt.close('all')
 
     ### RETURN PROPOSALS WITH CURIOUS WORD COUNTS
-    ind_a = np.where( (wc_a > mu_a + 2 * std_a) | (wc_a < mu_a - 2 * std_a) )
-    ind_c = np.where( (wc_c > mu_c + 2 * std_c) | (wc_c < mu_c - 2 * std_c) )
-
-    return fn[ind_a], fn[ind_c]
+    # ind = np.where( (wc > mu + 2 * std) | (wc < mu - 2 * std) )
 
 
-def plot_top(prefix, opath, wc, mc, mcb, expsig):
+def plot_top_words(prefix, opath, wc, mc, expsig=3, mcb=[]):
 
     """
     PURPOSE:   plot most used words
@@ -336,13 +348,16 @@ def plot_top(prefix, opath, wc, mc, mcb, expsig):
     e_time = half_life / np.log(2)
     ind = np.min([int(round(expsig * half_life)), len(xvals)-1])
     ax.axvline(xvals[ind], linestyle=":", color='gray')
-    print("\n\tTop words: " + textwrap.shorten(str(xlabs[0:ind+1]), 60))
+    print("\n\tKeywords: " + textwrap.shorten(str(xlabs[0:ind+1]), 60))
 
     ### CLEANUP
     fig.savefig(os.path.join(opath, prefix + '.pdf'), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     plt.close('all')
 
-    return xlabs[0:ind+1]
+    ### SAVE TOP WORDS
+    top = xlabs[0:ind+1] 
+
+    return top.tolist()
 
 
 def exp_fit(x, a, b, c):
@@ -353,46 +368,47 @@ def exp_fit(x, a, b, c):
 # ====================== Set Inputs =======================
 
 ### SET THINGS TO DO
-Process_Proposals = True                                # DO NLP PRE-PROCESSING
-Make_LDA_Models = False                                 # MAKE ML MODELS
+PreProcess_Proposals = True                                               # DO NLP PRE-PROCESSING
+Make_LDA_Models = False                                                   # MAKE ML MODELS
 
-### SET INPUTS THAT ARE PROGRAM-SPECIFIC
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
-NLP_Path  = '../panels/XRP20_NLP'                                         # PATH TO NPL OUTPUTS
+### SET I/O PATHS
+PDF_Path = './MyPDFs'
+Out_Path  = './MyOutputs'
+
+### SET FILES FOR CLEANING TEXT
+Lemm_File = '../panels/nlp_words - lemmatize.csv'                         # ASTRO LEMMATIZE WORDS
+Remv_File = '../panels/nlp_words - stop.csv'                              # NLP WORDS TO REMOVE
 Remv_Prog_File = '../panels/nlp_words - xrp.csv'                          # NLP WORDS TO REMOVE
-
-### GENERAL INPUTS THAT USUALLY DON'T CHANGE
-Page_Lim  = 15                                                  # PROPOSAL PAGE LIMIT
-ExpMult  = 3                                                    # CUTOFF FOR EXPNENTIAL DROP
-Lemm_File = '../panels/nlp_words - lemmatize.csv'               # ASTRO LEMMATIZE WORDS
-Remv_File = '../panels/nlp_words - stop.csv'                    # NLP WORDS TO REMOVE
 
 
 # ====================== Main Code ========================
 
-if Process_Proposals:
+### DO PRE-PROCESSING
+if PreProcess_Proposals:
 
-    ### GRAB INFO IF IT DOESN'T ALREADY EXIST
+    ### GET LIST OF PDF FILES
     PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
-    Files, WC_All, WC_Clean, Text_All, Vocab_All, MC_All, MC_Top, Files_Skip, ML_Count  = [], [], [], [], [], [], [], [], []
+
+    ### ARRAYS TO FILL
+    File_Names_All, Prop_Nb_All, Files_Skipped_All, Text_Proposal_All, Text_Clean_All = [], [], [], [], []
+    MC_Words_All, Key_Words_All, Vocab_All, ML_Count_All = [], [], [], []
+
+    ### LOOP THROUGH ALL PROPOSALS
     for p, pval in enumerate(PDF_Files):
 
-        ### GET PDF FILE NAME
-        Prop_Name = (pval.split('/')[-1]).split('.pdf')[0]
-        if Prop_Name in ["18-XRP18_2-0033-Fischer"]:
-            continue
-
-        ### OPEN PDF FILE
+        ### OPEN PDF DOCUMENT
         Doc = fitz.open(pval)
-        print(colored("\n\n\n\t" + Prop_Name, 'green', attrs=['bold']))
-
-        ### GET PAGES OF PROPOSAL
+        
+        ### GET PI NAME AND PROPOSAL NUMBER
+        PI_First, PI_Last, Prop_Nb = get_proposal_info(Doc)
+        print(colored(f'\n\n\n\t{Prop_Nb}\t{PI_Last}', 'green', attrs=['bold']))
+        
+        ### GET PAGES OF S/T/M PROPOSAL
         try:
-            Page_Num, Page_Start, Page_End = get_pages(Doc, Page_Lim)
+            Page_Num, Page_Start, Page_End = get_pages(Doc)         
         except RuntimeError:
-            print("\tCould not read PDF")
-            print("\n\t!!!!!!!!!DID NOT SAVE!!!!!!!!!!!!!!!!")
-            Files_Skip.append(pval)
+            print("\n\tCould not read PDF, did not save")
+            Files_Skipped_All.append(pval)
             continue
 
         ### GET TEXT OF FIRST PAGE TO CHECK
@@ -407,49 +423,57 @@ if Process_Proposals:
 
         ### SPLIT INTO WORDS
         Text_Split = split_text(Text_Proposal)
+        if len(Text_Split) == 0:
+            print("\n\tCould not read PDF, did not save")
+            Files_Skipped_All.append(pval)
+            continue
 
         ### CLEAN UP TEXT
         Text_Clean, RFlag = clean_text(Text_Split, Lemm_File, Remv_File, Remv_Prog_File)
-        # Text_Clean, RFlag = clean_text(Text_Split, Lemm_File, Remv_File)
-
-        ### IDENTIFY MOST USED WORDS
-        FD = nltk.FreqDist(Text_Clean)
-        MC = dict(FD.most_common(50))
-        MC_All.append(list(MC.keys()))
-
-        ### IDENTIFY MOST USED BIGRAMS (MUST OCCUR AT LEAST 10 TIMES)
-        BGM = nltk.collocations.BigramAssocMeasures()
-        BGF = BigramCollocationFinder.from_words(Text_Clean)
-        BGF.apply_freq_filter(10)
-        MCB = BGF.ngram_fd
-        tmp = BGF.score_ngrams(BGM.raw_freq)
-
         print("\n\tTotal Word Count:\t{}".format(len(Text_Split)))
         print("\tCleaned Word Count:\t{}".format(len(Text_Clean)))
 
-        ### SAVE PROPOSAL PRE-PROCESSING FOR THOSE THAT MADE IT THROUGH
-        PreFix = 'pp_rf' + str(RFlag).zfill(2) + '_' + pval.split('/')[-1][0:-4]
-        top = plot_top(PreFix, NLP_Path, len(Text_Split), MC, MCB, ExpMult)
-        if (len(Text_Clean) > 1000) & (not any('�' in word for word in top)):
+        if (len(Text_Clean) > 1000):
 
-            Text_All.append(Text_Clean)
-            WC_All.append(len(Text_Split))
-            WC_Clean.append(len(Text_Clean))
-            Files.append(pval)
-            MC_Top.append(top.tolist())
+            ### IDENTIFY MOST USED WORDS
+            FD = nltk.FreqDist(Text_Clean)
+            MC_Words = dict(FD.most_common(50))
+
+            # ### IDENTIFY MOST USED BIGRAMS (MUST OCCUR AT LEAST 10 TIMES)
+            # BGM = nltk.collocations.BigramAssocMeasures()
+            # BGF = BigramCollocationFinder.from_words(Text_Clean)
+            # BGF.apply_freq_filter(10)
+            # MCB = BGF.ngram_fd
+            # tmp = BGF.score_ngrams(BGM.raw_freq)
+
+            ### IDENTIFY KEYWORDS
+            PreFix = f'kw_rf{str(RFlag).zfill(2)}_{Prop_Nb}_{PI_Last}'
+            Key_Words = plot_top_words(PreFix, Out_Path, len(Text_Split), MC_Words)
+
+            ### SAVE THINGS
+            File_Names_All.append(pval)
+            Prop_Nb_All.append(Prop_Nb)
+            Text_Clean_All.append(Text_Clean)
+            Text_Proposal_All.append(Text_Split)
+            MC_Words_All.append(list(MC_Words.keys()))
+            Key_Words_All.append(Key_Words)
             Vocab_All = Vocab_All + Text_Clean
-            # np.save(os.path.join(NLP_Path, PreFix + '.npy'), top)
 
             ### CHECK IF ML MENTIONED
-            ml_words = ["machine learning", "deep learning", "artificial intelligence"]
-            ML_Count.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in ml_words])))
+            ML_Words = ["machine learning", "deep learning", "artificial intelligence"]
+            ML_Count_All.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in ML_Words])))
 
         else:
-            Files_Skip.append(pval)
-            print("\n\t!!!!!!!!!DID NOT SAVE!!!!!!!!!!!!!!!!")
 
-    Bad_All, Bad_Clean = plot_wc(NLP_Path, np.array(Files), np.array(WC_All), np.array(WC_Clean))
+            Files_Skipped_All.append(pval)
+            print("\n\tCould not read PDF, did not save")
+
+    ### PLOT DISTRIBUTION OF WORD COUNTS
+    plot_wc(Out_Path, File_Names_All, [len(x) for x in Text_Proposal_All])
+
+    ### GRAB UNIQUE VOCABULARY
     Vocab = np.unique(np.array(Vocab_All))
+
 
 
 ### TO DO: PARAMETERIZE ALL THESE AND SAVE DICT/CORP + MODELS W/RANDOM SEED SET FOR EASY LOADING
@@ -467,9 +491,9 @@ if Make_LDA_Models:
     ### low eta results in higher weight placed on the top words and lower weight placed on the bottom words for each topic
     ### DEFAULTS: num_topics=100, id2word=None, distributed=False, chunksize=2000, passes=1, update_every=1, alpha='symmetric', eta=None, decay=0.5, offset=1.0, eval_every=10, iterations=50, gamma_threshold=0.001)
     NumTopics = 3
-    Dict = corpora.Dictionary(Text_All)
-    Corp = [Dict.doc2bow(text) for text in Text_All]
-    logging.basicConfig(filename=os.path.join(NLP_Path, 'LDA_gensim.log'), format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
+    Dict = corpora.Dictionary(Text_Clean_All)
+    Corp = [Dict.doc2bow(text) for text in Text_Clean_All]
+    logging.basicConfig(filename=os.path.join(Out_Path, 'LDA_gensim.log'), format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
     LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, passes=50, iterations=150,
                                         #    eta = 'auto', alpha='auto', eval_every=1)
                                            eta = [0.001]*len(Dict.keys()), alpha=[0.001]*NumTopics, eval_every=10)
@@ -479,7 +503,7 @@ if Make_LDA_Models:
 
     ### PLOT CONVERGENCE
     p = re.compile(r"(-*\d+\.\d+) per-word .* (\d+\.\d+) perplexity")
-    matches = [p.findall(l) for l in open(os.path.join(NLP_Path, 'LDA_gensim.log'))]
+    matches = [p.findall(l) for l in open(os.path.join(Out_Path, 'LDA_gensim.log'))]
     matches = [m for m in matches if len(m) > 0]
     tuples = [t[0] for t in matches]
     perplexity = [float(t[1]) for t in tuples]
@@ -490,7 +514,7 @@ if Make_LDA_Models:
     plt.xlabel("iteration")
     plt.title("Topic Model Convergence")
     plt.grid()
-    plt.savefig(os.path.join(NLP_Path, "LDA_convergence_liklihood.pdf"))
+    plt.savefig(os.path.join(Out_Path, "LDA_convergence_liklihood.pdf"))
     plt.close()
 
     ### MAKE NICE VISUALIZATION
@@ -503,15 +527,15 @@ if Make_LDA_Models:
     ### SAVE MODEL IF GOOD
     PreFixLDA = "LDA_NT-" + str(NumTopics) + '_'
     pickle.dump(Corp, open(os.path.join(NLP_Path, PreFixLDA + 'corpus.pkl'), 'wb'))
-    Dict.save(os.path.join(NLP_Path, PreFixLDA + 'dict.gensim'))
-    LDAM.save(os.path.join(NLP_Path, PreFixLDA + 'model5.gensim'))
+    Dict.save(os.path.join(Out_Path, PreFixLDA + 'dict.gensim'))
+    LDAM.save(os.path.join(Out_Path, PreFixLDA + 'model5.gensim'))
 
-    ### FIND A CATEGORY FOR A DOC (0 Boss, 95 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
-    idx = -3
-    dd = Dict.doc2bow(Text_All[idx])
+    ### FIND A CATEGORY FOR A DOC (0 Boss, 96 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
+    idx = 40
+    dd = Dict.doc2bow(Text_Clean_All[idx])
     # cc = [Dict.doc2bow(text) for text in Text_All]
     print("\n")
-    print(Files[idx])
-    print(MC_Top[idx])
+    print(File_Names_All[idx])
+    print(Key_Words_All[idx])
     print(LDAM.get_document_topics(dd))
 
