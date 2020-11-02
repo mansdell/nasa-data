@@ -368,12 +368,13 @@ def exp_fit(x, a, b, c):
 # ====================== Set Inputs =======================
 
 ### SET THINGS TO DO
-PreProcess_Proposals = True                                               # DO NLP PRE-PROCESSING
-Make_LDA_Models = False                                                   # MAKE ML MODELS
+Find_Keywords = False                                                     # GRAB KEYWORDS 
+Make_LDA_Models = False                                                   # MAKE LDA MODELS
+Apply_LDA_Models = True                                                   # APPLY LDA MODELS
 
 ### SET I/O PATHS
-PDF_Path = './MyPDFs'
-Out_Path  = './MyOutputs'
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
+Out_Path  = '../panels/XRP20_NLP'                                         # PATH TO NPL OUTPUTS
 
 ### SET FILES FOR CLEANING TEXT
 Lemm_File = '../panels/nlp_words - lemmatize.csv'                         # ASTRO LEMMATIZE WORDS
@@ -384,13 +385,13 @@ Remv_Prog_File = '../panels/nlp_words - xrp.csv'                          # NLP 
 # ====================== Main Code ========================
 
 ### DO PRE-PROCESSING
-if PreProcess_Proposals:
+if Find_Keywords:
 
     ### GET LIST OF PDF FILES
     PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
     ### ARRAYS TO FILL
-    File_Names_All, Prop_Nb_All, Files_Skipped_All, Text_Proposal_All, Text_Clean_All = [], [], [], [], []
+    File_Names_All, PI_Names_All, Prop_Nb_All, Files_Skipped_All, Text_Proposal_All, Text_Clean_All = [], [], [], [], [], []
     MC_Words_All, Key_Words_All, Vocab_All, ML_Count_All = [], [], [], []
 
     ### LOOP THROUGH ALL PROPOSALS
@@ -418,7 +419,7 @@ if PreProcess_Proposals:
         
         ### GRAB TEXT OF ENTIRE PROPOSAL
         Text_Proposal = ''
-        for i, val in enumerate(np.arange(Page_Start, Page_End)):    
+        for i, val in enumerate(np.arange(Page_Start, Page_End + 1)):    
             Text_Proposal = Text_Proposal + ' ' + get_text(Doc, val)
 
         ### SPLIT INTO WORDS
@@ -452,6 +453,7 @@ if PreProcess_Proposals:
 
             ### SAVE THINGS
             File_Names_All.append(pval)
+            PI_Names_All.append(PI_Last)
             Prop_Nb_All.append(Prop_Nb)
             Text_Clean_All.append(Text_Clean)
             Text_Proposal_All.append(Text_Split)
@@ -471,8 +473,12 @@ if PreProcess_Proposals:
     ### PLOT DISTRIBUTION OF WORD COUNTS
     plot_wc(Out_Path, File_Names_All, [len(x) for x in Text_Proposal_All])
 
-    ### GRAB UNIQUE VOCABULARY
-    Vocab = np.unique(np.array(Vocab_All))
+    ### SAVE INFORMATION FOR NLP MODELS
+    # Vocab = np.unique(np.array(Vocab_All))
+    pickle.dump(Text_Clean_All, open(os.path.join(Out_Path, 'text_clean.pkl'), 'wb'))
+    d = {'Prop_Nb': Prop_Nb_All, 'PI_Name': PI_Names_All, 'Keywords': Key_Words_All}
+    df = pd.DataFrame(data=d)
+    df.to_csv(os.path.join(Out_Path, 'keywords.csv'), index=False)
 
 
 
@@ -480,7 +486,11 @@ if PreProcess_Proposals:
 ### VIZUALIZE CATEGORIZATIONS
 
 if Make_LDA_Models:
-                            
+
+    ### READ IN DATA FROM PRE-PROCESSING
+    Text_Clean_All = pickle.load(open(os.path.join(Out_Path, 'text_clean.pkl'), 'rb')) 
+    df = pd.read_csv(os.path.join(Out_Path, 'keywords.csv'))
+
     ### RUN LDA MODEL
     ### set passes to high value; useful to see corpus many time for small datasets
     ### chunksize is how many are seen at once; can effect results but not sure how
@@ -526,16 +536,27 @@ if Make_LDA_Models:
 
     ### SAVE MODEL IF GOOD
     PreFixLDA = "LDA_NT-" + str(NumTopics) + '_'
-    pickle.dump(Corp, open(os.path.join(NLP_Path, PreFixLDA + 'corpus.pkl'), 'wb'))
+    pickle.dump(Corp, open(os.path.join(Out_Path, PreFixLDA + 'corpus.pkl'), 'wb'))
     Dict.save(os.path.join(Out_Path, PreFixLDA + 'dict.gensim'))
     LDAM.save(os.path.join(Out_Path, PreFixLDA + 'model5.gensim'))
 
+
+if Apply_LDA_Models:
+
+    LDAM = gensim.models.ldamodel.LdaModel.load(os.path.join(Out_Path, 'LDA_NT-3_model5.gensim'))
+
     ### FIND A CATEGORY FOR A DOC (0 Boss, 96 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
-    idx = 40
+    idx = 14
     dd = Dict.doc2bow(Text_Clean_All[idx])
     # cc = [Dict.doc2bow(text) for text in Text_All]
     print("\n")
     print(File_Names_All[idx])
     print(Key_Words_All[idx])
     print(LDAM.get_document_topics(dd))
+
+    for i, val in enumerate(df['Prob_Nb']):
+        dd = Dict.doc2bow(Text_Clean_All[i])
+        print(df['Prop_Nb'].iloc[i], LDAM.get_document_topics(dd))
+        pdb.set_trace()
+
 

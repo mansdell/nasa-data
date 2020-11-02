@@ -186,7 +186,7 @@ def get_phd_data(doc, ps, pi):
     """
 
     ### OPEN LOG FOR PHD DATA
-    phd_data, phd_flag = [], []
+    phd_data, phd_page = [], []
 
     ### WORDS TO IDENTIFY CV OR PhD
     cv_words = ["curriculum", "vitae", "biographic", "sketches", "cv", "education", "professional", "experience"]
@@ -224,7 +224,7 @@ def get_phd_data(doc, ps, pi):
                             ### CHECK IF YEAR FOUND
                             if any(i.isdigit() for i in sval["text"]):
                                 phd_data.append(sval["text"])
-                                phd_flag.append(1)
+                                phd_page.append(val)
                             
                             ### IF NOT, CHECK ALL OTHER SPANS IF NO YEAR FOUND
                             else:
@@ -232,7 +232,7 @@ def get_phd_data(doc, ps, pi):
                                 for c, cval in enumerate(ncheck):
                                     if any(i.isdigit() for i in lval["spans"][cval]["text"]):
                                         phd_data.append(lval["spans"][cval]["text"] + ' ' + sval["text"])
-                                        phd_flag.append(2)
+                                        phd_page.append(val)
 
                             ### IF NOT, CHECK LINES JUST BEFORE/AFTER MENTION FOR YEAR
                             dl = 2
@@ -248,7 +248,7 @@ def get_phd_data(doc, ps, pi):
                                             tmp = tmp + ' ' + tmptmp
                                 if len(tmp) > 0:
                                     phd_data.append(tmp + ' ' + sval["text"])
-                                    phd_flag.append(3+dl)
+                                    phd_page.append(val)
                                 dl += 1
 
                             # ### CHECK EVEN FURTHER ONLY IF YEAR NOT FOUND YET
@@ -278,12 +278,12 @@ def get_phd_data(doc, ps, pi):
             #             print("TESTING")
             
             if len(phd_data) > 0:
-                return phd_data, phd_flag
+                return phd_data, phd_page
 
-    return phd_data, phd_flag
+    return phd_data, phd_page
 
 
-def guess_phd_year(info, flag):
+def guess_phd_year(info, page):
 
     """
     PURPOSE:   guess the PhD year of PI
@@ -334,7 +334,7 @@ def guess_phd_year(info, flag):
         for p, pval in enumerate(info):
             if p == 0:
                 print(f"\n\tPhD Year (Guess):\t{yr_guess}")
-                print(f"\tPhD Text [{flag[p]}]:\t\t{info[p]}")
+                print(f"\tPhD Text [{page[p]+1}]:\t\t{info[p]}")
             else:
                 print(f"\t\t\t\t{info[p]}")
 
@@ -380,7 +380,7 @@ def check_compliance(doc, ps, pe):
 
     ### GRAB FONT SIZE & CPI
     cpi = []
-    for i, val in enumerate(np.arange(ps, pe)):
+    for i, val in enumerate(np.arange(ps, pe + 1)):
         cpi.append(len(get_text(doc, val)) / 44 / 6.5)
         if i ==0:
             df = get_fonts(doc, val)
@@ -483,7 +483,7 @@ def get_demographics(doc, pi_first):
 
     ### GRAB ORG TYPE
     for i, val in enumerate(np.arange(20)):            
-        text = get_text(doc, val)        
+        text = get_text(doc, val)  
         if ('Question 2 : Type of institution' in text):
             org_type = (((text[text.index('Question 2'):text.index('Question 3')]).split('\n')[-2]).split(':')[-1]).strip()
     if org_type == '':
@@ -495,7 +495,7 @@ def get_demographics(doc, pi_first):
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2019'  
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'  
 Out_Path  = '../panels/XRP20_Output/' 
 
 ### GET LIST OF PDF FILES
@@ -531,8 +531,8 @@ for p, pval in enumerate(PDF_Files):
     Font_Size = check_compliance(Doc, Page_Start, Page_End)
 
     ### GUESS PHD YEAR FROM CV
-    PhD_Info, PhD_Flag = get_phd_data(Doc, Page_End, PI_Last)
-    PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Flag)
+    PhD_Info, PhD_Page = get_phd_data(Doc, Page_End, PI_Last)
+    PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Page)
 
     ### DEMOGRAPHIC INFORMATION
     PI_Gender, PI_Org, PI_Zip, CoI_Gender, Budget = get_demographics(Doc, PI_First)

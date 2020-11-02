@@ -46,7 +46,7 @@ def get_pages(d, pl=15):
     ### GET NUMBER OF PAGES
     pn = d.pageCount
 
-    check_words = ["contents", "c o n t e n t s", "budget", "cost", "costs",
+    check_words = ["contents", "budget", "cost", "costs",
                    "submitted to", "purposely left blank", "restrictive notice"]
 
     ### LOOP THROUGH PDF PAGES
@@ -85,7 +85,7 @@ def get_pages(d, pl=15):
         pe += 1
 
     ### CHECK THAT PAGE AFTER LAST IS REFERENCES
-    Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
+    Ref_Words = ['references', 'bibliography']
     if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
 
         ### IF NOT, TRY NEXT PAGE (OR TWO) AND UPDATED LAST PAGE NUMBER
@@ -137,13 +137,11 @@ def get_proposal_info(doc):
 # ====================== Set Inputs =======================
 
 ### KEYWORDS TO SEARCH FOR
-Keywords = ["machine learning", "deep learning", "artificial intelligence"]
-
-### SET I/O PATHS
-PDF_Path = './MyPDFs'
-Out_Path  = './MyOutputs'
+Keywords = ["machine learning", "deep learning", "artificial intelligence", "neural network", "active learning", "autoencoders"]
+Page_Limit = 7
 
 ### GET LIST OF PDF FILES
+PDF_Path = '/Volumes/MAnsdell/NASA_Proposals/NESSF/NESSF_Proposals_2019/NESSF19'
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### LOOP THROUGH ALL PROPOSALS
@@ -159,7 +157,7 @@ for p, pval in enumerate(PDF_Files):
     
     ### GET PAGES OF S/T/M PROPOSAL
     try:
-        Page_Num, Page_Start, Page_End = get_pages(Doc)         
+        Page_Num, Page_Start, Page_End = get_pages(Doc, pl=Page_Limit)         
     except RuntimeError:
         print("\n\tCould not read PDF, did not save")
         Files_Skipped_All.append(pval)
@@ -172,14 +170,35 @@ for p, pval in enumerate(PDF_Files):
     
     ### GRAB TEXT OF ENTIRE PROPOSAL
     Text_Proposal = ''
-    for i, val in enumerate(np.arange(Page_Start, Page_End)):    
+    for i, val in enumerate(np.arange(Page_Start, Page_End + 1)):    
         Text_Proposal = Text_Proposal + ' ' + get_text(Doc, val)
+        Text_Proposal = Text_Proposal.replace('\n', '')
 
+    ### COUNT NUMBER OF KEYWORD MENTIONS
     Prop_Nb_All.append(Prop_Nb)
-    Keywords_Count_All.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in Keywords])))
+    if Text_Proposal.count(" ") < 6500:
+        Keywords_Count_All.append([(Text_Proposal.lower()).count(x) for x in Keywords])
 
-ind1 = np.where(np.array(Keywords_Count_All) > 0)
-ind2 = np.where(np.array(Keywords_Count_All) > 3)
+    ### CATCH PROPOSALS WITH LOTS OF SPACES BETWEEN LETTERS
+    else:
+        kw = [x.replace(' ', '') for x in Keywords]
+        Text_Proposal = Text_Proposal.replace(' ', '')
+        Keywords_Count_All.append([(Text_Proposal.lower()).count(x) for x in kw])
 
-print("\n\tNumber of proposals that mention keywords:\t" + str(len(ind1[0])))
-print("\tNumber of proposals that mention keywords >3 times:\t" + str(len(ind2[0])))
+
+### MAKE KEYWORD DATAFRAME
+Prop_Nb_All = np.array(Prop_Nb_All)
+Keywords_Count_All = np.array(Keywords_Count_All)
+df_kw = pd.DataFrame(data=Keywords_Count_All, columns=Keywords, index=Prop_Nb_All)
+# df_kw.to_csv('keyword_outputs.csv', index=False)
+
+### MAKE TOTAL KEYWORD COUNTS
+Keywords_Count_Total = np.array([np.sum(x) for x in Keywords_Count_All])
+ind1 = np.where(Keywords_Count_Total > 0)
+ind2 = np.where(Keywords_Count_Total > 3)
+print("\n\nNumber of proposals that mention keywords:\t\t" + str(len(ind1[0])))
+print("Number of proposals that mention keywords > 3 times:\t" + str(len(ind2[0])))
+
+### WARNING IF SKIPPED PROPOSALS
+if len(Files_Skipped_All) > 0:
+    print(colored(f'\n\n{len(Files_Skipped_All)} files could not be read', 'red', attrs=['bold']))
