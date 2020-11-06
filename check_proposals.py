@@ -26,6 +26,7 @@ import unicodedata
 
 import gender_guesser.detector as gender
 
+
 # ============== Define Functions ===============
 
 def get_text(d, pn):
@@ -486,6 +487,7 @@ def get_demographics(doc, pi_first):
         text = get_text(doc, val)  
         if ('Question 2 : Type of institution' in text):
             org_type = (((text[text.index('Question 2'):text.index('Question 3')]).split('\n')[-2]).split(':')[-1]).strip()
+            break
     if org_type == '':
         org_type = 'Not Specified'
 
@@ -547,6 +549,8 @@ for p, pval in enumerate(PDF_Files):
     Org_All.append(PI_Org)
     CoI_Gender_All.append(CoI_Gender)
     Budget_All.append(Budget)
+
+    pdb.set_trace()
 
 d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'Font_Size': Font_All, 
      'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All,
