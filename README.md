@@ -16,23 +16,26 @@ Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
 ### check_proposals.py
 
-This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, attempts to find the "Scientific / Technical / Management" section (hereafter "the proposal"), and then grabs/checks a variety of useful things that are output into a csv file. These things are described below:
+This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, attempts to find the "Scientific / Technical / Management" section (hereafter "the proposal"), and then grabs/checks a variety of useful things that are output into a csv file. These things are described below. Before you run the code, you'll want to change the "PDF_Path" and "Out_Path" variables to the desired directories.
 
 * PI name and proposal number
   - These are taken from the cover page of the NSPIRES-formatted PDF
   
 * Font size (useful for checking compliance)
   - The median font size used in the proposal is calculated, and a warning is given when <=11.8 pt (e.g., for checking compliance)
-  - A histogram of the font sizes (based on each PDF ["span"](https://pymupdf.readthedocs.io/en/latest/faq.html#how-to-analyze-font-characteristics)) can be saved to the specified output directory
+  - A histogram of the font sizes (based on each PDF ["span"](https://pymupdf.readthedocs.io/en/latest/faq.html#how-to-analyze-font-characteristics)) can be saved to the specified output directory (right now this isn't an active feature, which is a fancy way of saying I commented it out).
   
 * PhD Year (useful for identifying early career proposers)
   - The PhD year of the PI is extracted from the CV that is included within the PDF after the main proposal 
   - When extracted, the PhD year is correct in ~95% of cases (in some cases, no PhD year can be found)
+  - The text from which the year was guessed, and the page of the proposal from which it was extracted, are printed to the screen and useful for double checking
 
 * Demographic information
-  - Inferred gender of the PI based on the first name
-  - Zipcode of the PI 
-  - Organization type
+  - Inferred gender of the PI based on the first name using [gender-guesser](https://pypi.org/project/gender-guesser/)
+  - Zipcode of the PI (useful for geographic analysis)
+  - Organization type (specified by the PI via NSPIRES)
+  - Number of male and female Co-I's (based on inferred gender, as for the PI)
+  
 
 ### group_proposals.py
 
