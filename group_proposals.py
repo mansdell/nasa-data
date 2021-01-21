@@ -368,18 +368,18 @@ def exp_fit(x, a, b, c):
 # ====================== Set Inputs =======================
 
 ### SET THINGS TO DO
-Find_Keywords = False                                                     # GRAB KEYWORDS 
-Make_LDA_Models = False                                                   # MAKE LDA MODELS
-Apply_LDA_Models = True                                                   # APPLY LDA MODELS
+Find_Keywords = False                                                      # GRAB KEYWORDS 
+Make_LDA_Models = False                                                    # MAKE LDA MODELS
+Apply_LDA_Models = True                                                  # APPLY LDA MODELS
 
 ### SET I/O PATHS
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'    # PATH TO PROPOSAL PDFs
-Out_Path  = '../panels/XRP20_NLP'                                         # PATH TO NPL OUTPUTS
+PDF_Path  = '../panels/ECA20_Proposals'                                   # PATH TO PROPOSAL PDFs
+Out_Path  = '../panels/ECA20_Output'                                      # PATH TO NPL OUTPUTS
 
 ### SET FILES FOR CLEANING TEXT
 Lemm_File = '../panels/nlp_words - lemmatize.csv'                         # ASTRO LEMMATIZE WORDS
 Remv_File = '../panels/nlp_words - stop.csv'                              # NLP WORDS TO REMOVE
-Remv_Prog_File = '../panels/nlp_words - xrp.csv'                          # NLP WORDS TO REMOVE
+Remv_Prog_File = '../panels/nlp_words - eca.csv'                          # NLP WORDS TO REMOVE
 
 
 # ====================== Main Code ========================
@@ -434,7 +434,7 @@ if Find_Keywords:
         print("\n\tTotal Word Count:\t{}".format(len(Text_Split)))
         print("\tCleaned Word Count:\t{}".format(len(Text_Clean)))
 
-        if (len(Text_Clean) > 1000):
+        if (len(Text_Clean) > 700):
 
             ### IDENTIFY MOST USED WORDS
             FD = nltk.FreqDist(Text_Clean)
@@ -479,6 +479,7 @@ if Find_Keywords:
     d = {'Prop_Nb': Prop_Nb_All, 'PI_Name': PI_Names_All, 'Keywords': Key_Words_All}
     df = pd.DataFrame(data=d)
     df.to_csv(os.path.join(Out_Path, 'keywords.csv'), index=False)
+    print("\n\n")
 
 
 
@@ -494,6 +495,7 @@ if Make_LDA_Models:
     ### RUN LDA MODEL
     ### set passes to high value; useful to see corpus many time for small datasets
     ### chunksize is how many are seen at once; can effect results but not sure how
+    ### update_every=0 is batch learning (on all available data); slower but more accurate that than >=1 ‘online’ learning (mini-batch learning)
     ### alpha close to zero = fewer topics per document; auto = will be tuned automatically.
     ### alpha and eta can be thought of as smoothing parameters when we compute how much each document "likes" a topic (alpha) or how much each topic "likes" a word (eta)
     ### higher alpha makes the document preferences "smoother" over topics, and a higher eta makes the topic preferences "smoother" over words.
@@ -504,10 +506,9 @@ if Make_LDA_Models:
     Dict = corpora.Dictionary(Text_Clean_All)
     Corp = [Dict.doc2bow(text) for text in Text_Clean_All]
     logging.basicConfig(filename=os.path.join(Out_Path, 'LDA_gensim.log'), format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
-    LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, passes=50, iterations=150,
-                                        #    eta = 'auto', alpha='auto', eval_every=1)
+    LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, passes=500, iterations=100, update_every=0,
                                            eta = [0.001]*len(Dict.keys()), alpha=[0.001]*NumTopics, eval_every=10)
-    topics = LDAM.print_topics(num_words=6)
+    topics = LDAM.print_topics(num_words=10)
     for topic in topics:
         print(topic)
 
@@ -543,20 +544,44 @@ if Make_LDA_Models:
 
 if Apply_LDA_Models:
 
+    DF = pd.read_csv(os.path.join(Out_Path, 'keywords.csv'))
+    Text_Clean_All = pickle.load(open(os.path.join(Out_Path, 'text_clean.pkl'), 'rb')) 
+    Dict = corpora.Dictionary(Text_Clean_All)
+
     LDAM = gensim.models.ldamodel.LdaModel.load(os.path.join(Out_Path, 'LDA_NT-3_model5.gensim'))
-
-    ### FIND A CATEGORY FOR A DOC (0 Boss, 96 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
-    idx = 14
-    dd = Dict.doc2bow(Text_Clean_All[idx])
-    # cc = [Dict.doc2bow(text) for text in Text_All]
+    topics = LDAM.print_topics(num_words=10)
+    print('\n')
+    for topic in topics:
+        print(topic)
     print("\n")
-    print(File_Names_All[idx])
-    print(Key_Words_All[idx])
-    print(LDAM.get_document_topics(dd))
 
-    for i, val in enumerate(df['Prob_Nb']):
+    # ### FIND A CATEGORY FOR A DOC (0 Boss, 96 Cleeves, 14 Hasegawa; 37 Ertel; 9 Mann; 30 Morley; 40 Bergin)
+    # idx = 14
+    # dd = Dict.doc2bow(Text_Clean_All[idx])
+    # # cc = [Dict.doc2bow(text) for text in Text_All]
+    # print("\n")
+    # print(File_Names_All[idx])
+    # print(Key_Words_All[idx])
+    # print(LDAM.get_document_topics(dd))
+
+    Prop, Score0, Score1, Score2 = [], [], [], []
+    for i, val in enumerate(DF['Prop_Nb']):
+
         dd = Dict.doc2bow(Text_Clean_All[i])
-        print(df['Prop_Nb'].iloc[i], LDAM.get_document_topics(dd))
-        pdb.set_trace()
+        prop = DF['Prop_Nb'].iloc[i]
+        scores = LDAM.get_document_topics(dd)
+        print(prop, scores)
+
+
+    # S0 = [x[1] for x in Score0]
+    # S1 = [x[1] for x in Score1]
+    # S2 = [x[1] for x in Score2]
+
+        # for s, sval in enumerate(scores):
+        #     if (s==0) & sval[0] != 0:
+        #     #     print('test')
+        #     # print(s[0])
+        # pdb.set_trace()
+        # print(DF['Prop_Nb'].iloc[i], LDAM.get_document_topics(dd))
 
 

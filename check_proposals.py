@@ -457,6 +457,9 @@ def get_demographics(doc, pi_first):
     ### GRAB ZIP CODE FROM COVER PAGE 
     zip_code = ((cp[cp.index('Postal Code'):cp.index('Country Code')]).split('\n')[1]).split('-')[0]
 
+    ### GRAB ORG NAME
+    org_name = ((cp[cp.index('Organization Name (Standard/Legal Name)'):cp.index('Company Division')]).split('\n')[1]).split('-')[0]
+
     ### GRAB BUDGET, IF AVAILABLE
     try:
         bt = float((((cp[cp.index('Total Budget'):cp.index('Year 1 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
@@ -482,7 +485,7 @@ def get_demographics(doc, pi_first):
     nf = coi_gndr.count('female') + coi_gndr.count('mostly_female')
     coi = f'{nm}_{nf}'
 
-    ### GRAB ORG TYPE
+    ### GRAB ORG & ORG TYPE
     for i, val in enumerate(np.arange(20)):            
         text = get_text(doc, val)  
         if ('Question 2 : Type of institution' in text):
@@ -491,21 +494,21 @@ def get_demographics(doc, pi_first):
     if org_type == '':
         org_type = 'Not Specified'
 
-    return gndr, org_type, zip_code, coi, [bt, b1]
+    return gndr, org_name, org_type, zip_code, coi, [bt, b1]
 
 
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2020/XRP_Proposals_2020'  
-Out_Path  = '../panels/XRP20_Output/' 
+PDF_Path  = '/Proposa_PDFs'
+Out_Path  = './' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### ARRAYS TO FILL
-Prop_Nb_All, PI_Last_All, Font_All, Budget_All = [], [], [], []
-PhD_Year_All, Zipcode_All, Gender_All, Org_All, CoI_Gender_All = [], [], [], [], []
+Prop_Nb_All, PI_First_All, PI_Last_All, Font_All, Budget_All = [], [], [], [], []
+PhD_Year_All, PhD_Page_All, Zipcode_All, Gender_All, Org_All, Org_Type_All, CoI_Gender_All = [], [], [], [], [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
@@ -537,23 +540,24 @@ for p, pval in enumerate(PDF_Files):
     PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Page)
 
     ### DEMOGRAPHIC INFORMATION
-    PI_Gender, PI_Org, PI_Zip, CoI_Gender, Budget = get_demographics(Doc, PI_First)
+    PI_Gender, PI_Org, PI_Org_Type, PI_Zip, CoI_Gender, Budget = get_demographics(Doc, PI_First)
 
     ### SAVE STUFF
     Prop_Nb_All.append(Prop_Nb)
     PI_Last_All.append(PI_Last)
+    PI_First_All.append(PI_First)
     Font_All.append(Font_Size)
     PhD_Year_All.append(PhD_Year)
+    PhD_Page_All.append(list(np.unique(PhD_Page)))
     Zipcode_All.append(PI_Zip)
     Gender_All.append(PI_Gender)
+    Org_Type_All.append(PI_Org_Type)
     Org_All.append(PI_Org)
     CoI_Gender_All.append(CoI_Gender)
     Budget_All.append(Budget)
 
-    pdb.set_trace()
-
-d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'Font_Size': Font_All, 
-     'PhD_Year': PhD_Year_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 'Org_Type': Org_All,
-     'CoI_Gender': CoI_Gender_All, 'Budget_Total_Yr1': Budget_All}
+d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All, 'Font_Size': Font_All, 
+     'PhD_Year': PhD_Year_All, 'PhD_Page': PhD_Page_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 
+     'Org_Name': Org_All, 'Org_Type': Org_Type_All, 'CoI_Gender': CoI_Gender_All, 'Budget_Total_Yr1': Budget_All}
 df = pd.DataFrame(data=d)
 df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
