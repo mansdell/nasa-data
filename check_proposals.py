@@ -471,16 +471,23 @@ def get_demographics(doc, pi_first):
     print(f'\n\tGender (Guess):\t\t{gndr} ({pi_first})')
     print(f'\tZipcode:\t\t{zip_code}')
 
-    ### GRAB CO-I GENDERS FROM NEXT TWO COVER PAGES
-    coi_gndr = []
+    ### GRAB CO-I GENDERS (AND ANY SCIENCE PIs) FROM NEXT TWO COVER PAGES
+    coi_gndr, spi = [], []
     cp2 = get_text(doc, 1)
     if "SECTION VI - Team Members" in get_text(doc, 2):
         cp2 = cp2 + get_text(doc, 2)
     while 'Co-I' in cp2:
-        cp2 = cp2[cp2.index('Co-I'):]
-        cn = ((cp2[cp2.index('Co-I'):cp2.index('Contact')]).split('\n')[-2]).split(' ')[0]
-        coi_gndr.append(gdDB.get_gender(cn.title()))
-        cp2 = cp2[cp2.index('Phone'):]
+        if 'Co-I/Science PI' in cp2:
+            cp2 = cp2[cp2.index('Co-I/Science PI'):]
+            spi_first, spi_last = ((cp2[cp2.index('Co-I/Science PI'):cp2.index('Contact')]).split('\n')[-2]).split(' ')[0], ((cp2[cp2.index('Co-I/Science PI'):cp2.index('Contact')]).split('\n')[-2]).split(' ')[-1]
+            spi_gndr = gdDB.get_gender(spi_first.title())
+            spi = [spi_first, spi_last, spi_gndr]
+            cp2 = cp2[cp2.index('Phone'):]
+        else:
+            cp2 = cp2[cp2.index('Co-I'):]
+            cn = ((cp2[cp2.index('Co-I'):cp2.index('Contact')]).split('\n')[-2]).split(' ')[0]
+            coi_gndr.append(gdDB.get_gender(cn.title()))
+            cp2 = cp2[cp2.index('Phone'):]
     nm = coi_gndr.count('male') + coi_gndr.count('mostly_male')
     nf = coi_gndr.count('female') + coi_gndr.count('mostly_female')
     coi = f'{nm}_{nf}'
@@ -494,14 +501,14 @@ def get_demographics(doc, pi_first):
     if org_type == '':
         org_type = 'Not Specified'
 
-    return gndr, org_name, org_type, zip_code, coi, [bt, b1]
+    return gndr, org_name, org_type, zip_code, coi, [bt, b1], spi
 
 
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '/Proposa_PDFs'
-Out_Path  = './' 
+PDF_Path  = '/Users/mansdell/Desktop/tmp'
+Out_Path  = '/Users/mansdell/Desktop/' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
@@ -540,7 +547,7 @@ for p, pval in enumerate(PDF_Files):
     PhD_Year, _ = guess_phd_year(PhD_Info, PhD_Page)
 
     ### DEMOGRAPHIC INFORMATION
-    PI_Gender, PI_Org, PI_Org_Type, PI_Zip, CoI_Gender, Budget = get_demographics(Doc, PI_First)
+    PI_Gender, PI_Org, PI_Org_Type, PI_Zip, CoI_Gender, Budget, sPI = get_demographics(Doc, PI_First)
 
     ### SAVE STUFF
     Prop_Nb_All.append(Prop_Nb)
@@ -555,6 +562,23 @@ for p, pval in enumerate(PDF_Files):
     Org_All.append(PI_Org)
     CoI_Gender_All.append(CoI_Gender)
     Budget_All.append(Budget)
+
+    ### SAVE SCIENCE PI INFO, IF NEEDED
+    if len(sPI) != 0:
+        sPI_PhD_Info, sPI_PhD_Page = get_phd_data(Doc, Page_End, sPI[1])
+        sPI_PhD_Year, _ = guess_phd_year(sPI_PhD_Info, sPI_PhD_Page)
+        Prop_Nb_All.append(Prop_Nb+'_SciencePI')
+        PI_Last_All.append(sPI[1])
+        PI_First_All.append(sPI[0])
+        Font_All.append(Font_Size)
+        PhD_Year_All.append(sPI_PhD_Year)
+        PhD_Page_All.append(list(np.unique(sPI_PhD_Page)))
+        Zipcode_All.append(PI_Zip)
+        Gender_All.append(sPI[2])
+        Org_Type_All.append(PI_Org_Type)
+        Org_All.append(PI_Org)
+        CoI_Gender_All.append(CoI_Gender)
+        Budget_All.append(Budget)     
 
 d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All, 'Font_Size': Font_All, 
      'PhD_Year': PhD_Year_All, 'PhD_Page': PhD_Page_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 
