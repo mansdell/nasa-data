@@ -507,8 +507,8 @@ def get_demographics(doc, pi_first):
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '/Users/mansdell/Desktop/tmp'
-Out_Path  = '/Users/mansdell/Desktop/' 
+PDF_Path  = './Proposal_PDFs'
+Out_Path  = './' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
