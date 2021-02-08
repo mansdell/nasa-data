@@ -1,6 +1,6 @@
 # Background
 
-This directory contains some code to pull and analyze data from [NSPIRES](https://nspires.nasaprs.com/external/)-formatted proposals submitted to NASA [ROSES](https://science.nasa.gov/researchers/roses-blogs) calls.
+This directory contains some code to pull and analyze data from [NSPIRES](https://nspires.nasaprs.com/external/)-formatted proposals submitted to NASA [ROSES](https://science.nasa.gov/researchers/roses-blogs) calls, including checks on compliance with certain NASA policies.
 
 Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
@@ -36,6 +36,26 @@ This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, atte
   - Organization type (specified by the PI via NSPIRES)
   - Number of male and female Co-I's (based on inferred gender, as for the PI)
   
+### check_dapr.py
+
+This code reads in an anonymized proposal submitted to a ROSES program that follows Dual-Anonymouse Peer Reivew (DAPR). It attempts to find the different sections of the proposal (STM, DMP, Relevance, Budget) and then checks a variety of things to make sure it is DAPR compliant. The outputs are described below:
+
+* Page ranges for propsal sections
+  - These assume the following order: STM, References, DMP, Relevance, Budget
+  - They're usually correct, but sometimes they're not; this only really matters for searching for the PI name but avoiding the References section
+  - The value -99 is reported if the page limits could not be found
+  
+* Median font size
+  - The median font size used in the proposal is calculated, and a warning is given when <=11.8 pt (e.g., for checking compliance)
+  - This is the same as for check_proposal.py
+
+* Reference format
+  - DAPR proposals are supposed to use bracketed number references
+  - Reports number of brackets found in proposal and number of "et al." usages in proposal (the former number should be high, the latter low)
+  
+* Forbidden DAPR words
+  - DAPR proposal shouldn't include references to previous work, institutions/departments/universities/cities, PI or Co-I names, etc.
+  - Reports number of times such things are found and page numbers on which they are found
 
 ### group_proposals.py
 
