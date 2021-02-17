@@ -27,14 +27,6 @@ import gender_guesser.detector as gender
 # ============== Define Functions ===============
 
 def get_text(d, pn):
-
-    """
-    PURPOSE:   extract text from a given page of a PDF document
-    INPUTS:    d  = fitz Document object
-               pn = page number to read (int)
-    OUTPUTS:   t  = text of page (str)
-
-    """
                 
     ### LOAD PAGE
     p = d.loadPage(int(pn))
@@ -49,14 +41,6 @@ def get_text(d, pn):
 
 
 def get_fonts(doc, pn):
-
-    """
-    PURPOSE:   get font sizes used in the proposal
-    INPUTS:    doc = fitz Document object
-               pn  = page number to grab fonts (int)
-    OUTPUTS:   df  = dictionary with font sizes, types, colors, and associated text
-
-    """
 
     ### LOAD PAGE
     page = doc.loadPage(int(pn))
@@ -80,88 +64,6 @@ def get_fonts(doc, pn):
     df = pd.DataFrame (d, columns = ['Page', 'Font', 'Size', 'Color', 'Text'])
 
     return df
-
-
-def get_pages(d):
-
-    ### GET TOTAL NUMBER OF PAGES IN PDF
-    pn = d.pageCount
-
-    ### LOOP THROUGH PDF PAGES
-    stm_start, stm_end, ref_start, ref_end, dmp_start, dmp_end, rel_start, rel_end, fte_start, fte_end = 0, -100, -100, -100, -100, -100, -100, -100, -100, -100
-    for i, val in enumerate(np.arange(10, pn-1)):
-            
-        ### READ IN TEXT FROM THIS PAGE AND NEXT PAGE
-        t1 = get_text(d, val).replace('\n', '')[0:500]
-        t2 = get_text(d, val + 1).replace('\n', '')[0:500]
-
-        ### UGH SOMETIMES THIS MATTERS
-        t1 = t1.replace('   ', ' ')
-        t1 = t1.replace('  ', ' ')
-        t2 = t2.replace('   ', ' ')
-        t2 = t2.replace('  ', ' ')
-        
-        ### FIND STM END AND REFERENCES START
-        if (('reference' in t2.lower()) & ('reference' not in t1.lower())) | (('bibliography' in t2.lower()) & ('bibliography' not in t1.lower())):
-            stm_end = val
-            ref_start = val + 1
-
-        ### FIND REF END AND DMP START
-        if ('data management' in t2.lower()) & ('data management' not in t1.lower()):
-            ref_end = val
-            dmp_start = val + 1
-
-        ### FIND DMP END AND RELEVANCE START
-        if ('relevance' in t2.lower()) & ('relevance' not in t1.lower()):
-            dmp_end = val
-            rel_start = val + 1
-
-        ### FIND BUDGET INFO 
-        # if (('work effort' in t2.lower()) | ('budget' in t2.lower())) & (('work effort' not in t1.lower()) | ('budget' not in t1.lower())):
-        #     if rel_start != -100:
-        #         rel_end = val 
-        #     else:
-        #         dmp_end = val
-        #     fte_start = val + 1
-        #     fte_end = pn - 1
-        #     if stm_end != -100:
-        #         break
-
-    ### IF COULDN'T FIND END OF STM, ASSUME 16 PAGES (CONSERVATIVE SINCE USUAL HAS 1-2 PAGES OF FRONT MATTER)
-    if stm_end == -100:
-        stm_end = np.min([15, pn])
-    
-    ### IF COULDN'T START OF REFERENCES, BUT COULD FIND END, ASSUME REFS START RIGHT AFTER STM SECTION
-    if (ref_end != -100) & (ref_start == -100):
-        ref_start = stm_end + 1
-
-    ### LIMIT REFERENCES TO 5 PAGES
-    ### (SINCE IT DETERMINES END BY START OF DMP, AND SOMETIMES DMP IS ELSEWHERE)
-    # tc = 'white'
-    # if ref_end - ref_start > 5:
-    #     ref_end, tc = ref_start + 3, 'red'
-
-    ### ASSUME THAT BUDGET STUFF COMES AFTER RELEVANCE (OR WHATEVER WAS BEFORE THAT IF NO RELEVANCE) 
-    ### AND THAT RELEVANCE IS ONLY ONE PAGE
-    if rel_start != -100:
-        rel_end, fte_start, fte_end, tc2 = rel_start, rel_start + 1, pn-1, 'white'
-    elif dmp_end != -100:
-        fte_start, fte_end, tc2 = dmp_end+1, pn-1, 'yellow'
-    elif dmp_start != -100:
-        fte_start, fte_end, tc2 = dmp_start+1, pn-1, 'yellow'
-    elif ref_end != -100:
-        fte_start, fte_end, tc2 = ref_end+1, pn-1, 'yellow'
-    else:
-        fte_start, fte_end, tc2 = stm_end+1, pn-1, 'yellow'
-
-    print(f"\n\tPage Guesses:\n")
-    print(f"\t\tSTM = {stm_start+1, stm_end+1}")
-    print(f"\t\tRef = {ref_start+1, ref_end+1}")
-    print(f"\t\tDMP = {dmp_start+1, dmp_end+1}")
-    print(f"\t\tRel = {rel_start+1, rel_end+1}")
-    print(colored("\t\tFTE = (" + str(fte_start+1) + ", " + str(fte_end+1) + ")", tc2))
-
-    return [stm_start, stm_end], [ref_start, ref_end], [dmp_start, dmp_end], [rel_start, rel_end], [fte_start, fte_end]
 
 
 def get_median_font(doc, ps, pe):
@@ -202,7 +104,7 @@ def check_ref_type(doc, ps, pe):
     n_brac = len([i.start() for i in re.finditer(']', tp)])
     n_etal = len([i.start() for i in re.finditer('et al', tp)])
     if n_brac < 10:
-        print("\n\t# [] refs:\t", colored(str(n_brac), 'yellow'))
+        print("\n\t# [] refs:\t", colored(str(n_brac), 'red'))
     else:
         print("\n\t# [] refs:\t", str(n_brac))
     if n_etal > 10:
@@ -213,73 +115,156 @@ def check_ref_type(doc, ps, pe):
     return n_brac, n_etal
         
 
-def check_dapr_words(doc, ps_file, ref_pages):
+def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
-    ### GET PI INFO
+    ### LOAD PROPOSAL MASTER FILE FROM NSPIRES
     dfp = pd.read_csv(ps_file)
-    pi_name = (dfp[dfp['Proposal Number'] == Prop_Nb]['PI Last Name'].values[0]).split(',')[0]
-    pi_orgs = (dfp[dfp['Proposal Number'] == Prop_Nb]['Linked Org'].values[0]).split(', ')
-    pi_orgs.append(dfp[dfp['Proposal Number'] == Prop_Nb]['PI Company Name'].values[0])
+
+    ### GET PI INFO (iNSPIRES FORMAT)
+    pi_name = (dfp[dfp['Proposal Number'] == pn]['PI Last Name'].values[0]).split(',')[0]
+    pi_orgs = (dfp[dfp['Proposal Number'] == pn]['Linked Org'].values[0]).split(', ')
+    pi_orgs.append(dfp[dfp['Proposal Number'] == pn]['PI Company Name'].values[0])
     pi_orgs = np.unique(pi_orgs).tolist()
-    pi_city = (dfp[dfp['Proposal Number'] == Prop_Nb]['PI City'].values[0]).split(',')[0]
+    pi_city = (dfp[dfp['Proposal Number'] == pn]['PI City'].values[0]).split(',')[0]
+
+    ### GET PI INFO (OTHER FORMAT)
+    # pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')[0]
+    # pi_orgs = (dfp[dfp['Response number'] == pn]['Linked Org'].values[0]).split(', ')
+    # pi_orgs.append(dfp[dfp['Response number'] == pn]['Company name'].values[0])
+    # pi_orgs = np.unique(pi_orgs).tolist()
+    # pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
 
     ### GET ALL DAPR WORDS
-    dw = ['our group', 'our team', 'our work', 'our previous', 'our prior', 'my group', 'my team', 'university', 'department', 'dept.', 'institute', 'institution']
+    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.']
     dw = dw + pi_orgs + [pi_name] + [pi_city]
+    dw = np.unique(dw).tolist()
 
     ### GET PAGE NUMBERS WHERE DAPR WORDS APPEAR
     ### IGNORES REFERENCE SECTION, IF KNOWN
-    dwc = []
+    dwp = []
     for i, ival in enumerate(dw):
         if pd.isnull(ival):
             continue
         pn = []
-        for n, nval in enumerate(np.arange(0, doc.pageCount)):
+        for n, nval in enumerate(np.arange(stm_pages[0], doc.pageCount)):
             if (nval >= np.min(ref_pages)) & (nval <= np.max(ref_pages)) & (np.min(ref_pages) > 5):
                 continue
             tp = (get_text(doc, nval)).lower()
-            # if (' ' + ival.lower() + ' ' in tp):
+            # if (' ' + ival.lower() + ' ' in tp) | (' ' + ival.lower() + "'" in tp) | (' ' + ival.lower() + "." in tp):
             if (ival.lower() in tp):
                 pn.append(nval) 
-        dwc.append(pn)
+        dwp.append(pn)
 
-    ### PRINT FINDINGS TO SCREEN
-    for m, mval in enumerate(dwc):
+    ### RECORD NUMBER OF TIMES EACH WORD FOUND AND UNIQUE PAGE NUMBERS
+    # ### PRINT FINDINGS TO SCREEN
+    dww, dwcc, dwpp = [], [], []
+    for m, mval in enumerate(dwp):
         if len(mval) > 0:
              print(f'\t"{dw[m]}" found {len(mval)} times on pages {np.unique(mval)+1}')
+             dww.append(dw[m])
+             dwcc.append(len(mval))
+             dwpp.append((np.unique(mval)+1).tolist())
 
-    # ### INDEX START POINT IN TEXT
-    # idx = []
-    # for i, val in enumerate(dw):
-    #     idx.append([i.start() for i in re.finditer(' ' + val.lower() + ' ', tp)])
+    return dww, dwcc, dwpp
 
-    return dw, dwc
+
+def get_pages(d):
+
+    ### GET TOTAL NUMBER OF PAGES IN PDF
+    pn = d.pageCount
+
+    ### LOOP THROUGH PDF PAGES
+    stm_start, stm_end, ref_start, ref_end, ref_end_bu = 0, -100, -100, -100, -100
+    tcr, tcs, pflag = 'white', 'white', ''
+    for i, val in enumerate(np.arange(5, pn-1)):
+            
+        ### READ IN TEXT FROM THIS PAGE AND NEXT PAGE
+        t1 = get_text(d, val).replace('\n', '').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ')[0:500]
+        t2 = get_text(d, val + 1).replace('\n', '').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ')[0:500]
+        t1 = t1.lower()
+        t2 = t2.lower()
+
+        ### FIND START OF STM IF FULL NSPIRES PROPOSAL
+        if ('section x - budget' in t1) & ('section x - budget' not in t2):
+            stm_start = val + 1
+            continue
+
+        ### FIND STM END AND REFERENCES START
+        if (stm_start != -100) & (('reference' in t2) & ('reference' not in t1)) | (('bibliography' in t2) & ('bibliography' not in t1)):
+            stm_end = val
+            ref_start = val + 1
+            continue
+
+        ### REFERENCE END BACK-UP
+        if (ref_start != -100) & (('budget' in t2) & ('budget' not in t1)):
+            ref_end_bu = val
+            
+        ### FIND REF END 
+        w1, w2, w3, w4, w5, w6 = 'data management', 'budget justification', 'work plan', 'budget narrative', 'work effort', 'total budget'
+        if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)):
+            ref_end = val
+            if (ref_start != -100) & (ref_end > ref_start) & (stm_end - stm_start > 10):
+                break
+    
+    ### FIX SOME THINGS BASED ON COMMON SENSE
+    if ref_end < ref_start:
+        ### USE SIMPLE "BUDGET" FLAG IF WE HAVE TO
+        ref_end = ref_end_bu
+        if ref_end < ref_start:
+            ref_end = -100
+    if stm_end - stm_start <= 5:
+        ### IF STM SECTION REALLY SHORT, ASSUME 15 PAGES AND FLAG
+        stm_end, tcs = np.min([stm_start+15, pn]), 'yellow'
+    if (ref_end != -100) & (ref_start == -100) & (stm_end != -100):
+        ### IF FOUND END BUT NOT START OF REFERENCES, ASSUME REFS START RIGHT AFTER STM BUT FLAG
+        ref_start, tcr = stm_end + 1, 'yellow'
+    if ref_end == -100:
+        ### IF COULDN'T FIND REF END, ASSUME GOES TO END OF PDF (SOMETIMES THIS IS TRUE) AND FLAG
+        ref_end, tcr = pn-1, 'yellow'
+    if (tcr == 'yellow') | (tcs == 'yellow'):
+        pflag='YES'
+
+
+    ### IF PROPOSAL INCOMPLETE (E.G., WITHDRAWN) RETURN NOTHING
+    if pn - stm_start < 3:
+        return [], [], 0, ''
+
+    ### OTHERWISE, RETURN PAGE GUESSES
+    else:    
+        print(f"\n\tPage Guesses:\n")
+        print(colored(f"\t\tSTM = {stm_start+1, stm_end+1}", tcs))
+        print(colored(f"\t\tRef = {ref_start+1, ref_end+1}", tcr))
+        return [stm_start, stm_end], [ref_start, ref_end], pn, pflag
 
 
 # ====================== Main Code ========================
 
-### SET IN/OUT PATHS
-PDF_Path  = './pdfs-anon'
-Out_Path  = '.' 
+### SET PATH TO PDFs
+PDF_Path  = '../panels/HW20/pdfs-HW20_2-Anon'
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*anonproposal.pdf')))
-PS_File = './ProposalMaster.csv'
+PS_File = '../panels/HW20/HW20-ProposalMaster.csv'
 
 ### ARRAYS TO FILL
-Prop_Nb_All, PI_First_All, PI_Last_All, Font_All, Budget_All = [], [], [], [], []
-PhD_Year_All, PhD_Page_All, Zipcode_All, Gender_All, Org_All, Org_Type_All, CoI_Gender_All = [], [], [], [], [], [], []
+Prop_Nb_All, Font_Size_All, N_Brac_All, N_EtAl_All = [], [], [], []
+STM_Pages_All, Ref_Pages_All, pFlag_All = [], [], []
+DW_All, DWC_All, DWP_All = [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = (pval.split('/')[-1]).split('_anon')[0]
+    Prop_Nb = '20-'+pval.split('-')[-2]+'-'+(pval.split('-')[-1]).split('_')[0]
+    # Prop_Nb = '20-'+pval.split('_')[3]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
     Doc = fitz.open(pval)
-    STM_Pages, Ref_Pages, DMP_Pages, Rel_Pages, FTE_Pages = get_pages(Doc)
+    STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc)
+    if Tot_Pages == 0:
+        print(f'\n\tProposal incomplete, skipping')
+        continue
 
     ### CHECK FONT SIZE COMPLIANCE
     Font_Size = get_median_font(Doc, STM_Pages[0], STM_Pages[1])
@@ -288,5 +273,23 @@ for p, pval in enumerate(PDF_Files):
     N_Brac, N_EtAl = check_ref_type(Doc, STM_Pages[0], STM_Pages[1])
 
     ### CHECK DAPR WORDS
-    DW, DWC = check_dapr_words(Doc, PS_File, Ref_Pages)
+    DW, DWC, DWP = check_dapr_words(Doc, PS_File, Prop_Nb, STM_Pages, Ref_Pages)
 
+    ### RECORD STUFF
+    Prop_Nb_All.append(Prop_Nb)
+    Font_Size_All.append(Font_Size)
+    N_Brac_All.append(N_Brac)
+    N_EtAl_All.append(N_EtAl)
+    STM_Pages_All.append((np.array(STM_Pages) + 1).tolist())
+    Ref_Pages_All.append((np.array(Ref_Pages) + 1).tolist())
+    pFlag_All.append(pFlag)
+    DW_All.append(DW)
+    DWC_All.append(DWC)
+    DWP_All.append(DWP)
+
+### OUTPUT TO DESKTOP
+d = {'Prop_Nb': Prop_Nb_All, 'Font Size': Font_Size_All, 'N_Brac': N_Brac_All, 'N_EtAl':N_EtAl_All,
+     'STM_Pages': STM_Pages_All, 'Ref Pages': Ref_Pages_All, 'Flag Pages': pFlag_All,
+     'DAPR_Words': DW_All, 'DAPR_Word_Count': DWC_All, 'DAPR_Word_Pages': DWP_All}
+df = pd.DataFrame(data=d)
+df.to_csv(os.path.join(os.path.expanduser("~/Desktop"), 'dapr_checks.csv'), index=False)
