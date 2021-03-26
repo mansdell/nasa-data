@@ -379,16 +379,23 @@ def check_compliance(doc, ps, pe):
   
     """
 
-    ### GRAB FONT SIZE & CPI
-    cpi = []
+    ### GRAB FONT SIZE & CPI PER LINE
     for i, val in enumerate(np.arange(ps, pe + 1)):
-        cpi.append(len(get_text(doc, val)) / 44 / 6.5)
+        t = get_text(doc, val)
+        ln = t.split('\n')
+        ln = [x for x in ln if len(x) > 50] ## TRY TO ONLY KEEP REAL LINES
         if i ==0:
             df = get_fonts(doc, val)
+            cpi = [round(len(x)/6.5,2) for x in ln[2:-2]]  ### TRY TO AVOID HEADERS/FOOTERS
+            lns, lpi = ln[2:-2], [round(len(ln)/9, 2)]
         else:
             df = df.append(get_fonts(doc, val), ignore_index=True)
-    cpi = np.array(cpi)
+            cpi = cpi + [round(len(x)/6.5,2) for x in ln[2:-2]]
+            lns = lns + ln[2:-2]
+            lpi.append(round(len(ln)/9, 2))
+    cpi, lns, lpi = np.array(cpi), np.array(lns), np.array(lpi)
 
+    ### RETURN IF COULDN'T READ
     if len(df) == 0:
         return 0
 
@@ -404,13 +411,19 @@ def check_compliance(doc, ps, pe):
     # cft = Counter(df['Font'].values).most_common(1)[0][0]
     # print("\n\tMost common font:\t" + cft)
 
-    # ### COUNTS PER INCH
-    # CPC, CPI = len(cpi[cpi > 15.5]), [round(x, 1) for x in cpi[cpi > 15.5]]
-    # if CPC > 1:
-    #     print("\tPages with CPI > 15.5:\t", textwrap.shorten(colored((np.arange(ps, pe)[cpi > 15.5] + 1).tolist(), 'yellow'), 70))
-    #     print("\t\t\t\t", textwrap.shorten(colored(CPI, 'yellow'), 70))
-    # if (MFS <= 11.8) | (CPC > 1):
-    #     print(colored("\n\t!!!!! COMPLIANCE WARNING!!!!!", 'red'))
+    ### COUNTS PER INCH
+    cpi_max, lpi_max = 16.0, 5.5
+    ind_cpi, ind_lpi = np.where(cpi > cpi_max), np.where(lpi > lpi_max)
+    cpi, lns, lpi, pgs = cpi[ind_cpi], lns[ind_cpi], lpi[ind_lpi], (np.arange(ps, pe+1)+1)[ind_lpi].tolist()
+    if len(lpi) >= 1:
+        print(f"\tPages w/LPI > {lpi_max}:\t", colored(len(lpi), 'red'), colored(lpi, 'red'), colored(pgs, 'red'))
+    else:
+        print(f"\tPages w/LPI > {lpi_max}:\t", len(lpi), lpi)
+    if len(cpi) >= 8:
+        print(f"\n\tLines w/CPI > {cpi_max}:\t", colored(len(cpi), 'yellow'))
+        [print('\t\t\t\t',textwrap.shorten(x, 60)) for x in lns]
+    else:
+        print(f"\tLines w/CPI > {cpi_max}:\t", len(cpi))
 
     # ### PLOT HISTOGRAM OF FONTS
     # mpl.rc('xtick', labelsize=10)
@@ -431,7 +444,7 @@ def check_compliance(doc, ps, pe):
     # fig.savefig(os.path.join(out_path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     # plt.close('all')
 
-    return mfs
+    return mfs, cpi, lns, lpi, pgs
 
 
 def get_demographics(doc, pi_first):
@@ -507,20 +520,22 @@ def get_demographics(doc, pi_first):
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = './Proposal_PDFs'
-Out_Path  = './' 
+PDF_Path  = '../panels/'
+Out_Path  = '../panels/' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### ARRAYS TO FILL
-Prop_Nb_All, PI_First_All, PI_Last_All, Font_All, Budget_All = [], [], [], [], []
+Prop_Nb_All, PI_First_All, PI_Last_All, Budget_All = [], [], [], []
+Font_All, CPI_All, CPI_Lines_All, LPI_All, LPI_Pages_All = [], [], [], [], []
 PhD_Year_All, PhD_Page_All, Zipcode_All, Gender_All, Org_All, Org_Type_All, CoI_Gender_All = [], [], [], [], [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
     ### OPEN PDF DOCUMENT
+    pval = str(pval)
     Doc = fitz.open(pval)
 
     ### GET PI NAME AND PROPOSAL NUMBER
@@ -535,12 +550,12 @@ for p, pval in enumerate(PDF_Files):
         continue
 
     ### PRINT SOME TEXT TO CHECK
-    print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[100:130]), 40))
-    print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[100:130]), 40))
-    print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[100:130]), 40))  
+    print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[300:400]), 60))
+    print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[300:400]), 60))
+    print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[300:400]), 60))  
     
     ### CHECK FONT/TEXT COMPLIANCE
-    Font_Size = check_compliance(Doc, Page_Start, Page_End)
+    Font_Size, CPI, CPI_Lines, LPI, LPI_Pages = check_compliance(Doc, Page_Start, Page_End)
 
     ### GUESS PHD YEAR FROM CV
     PhD_Info, PhD_Page = get_phd_data(Doc, Page_End, PI_Last)
@@ -554,6 +569,10 @@ for p, pval in enumerate(PDF_Files):
     PI_Last_All.append(PI_Last)
     PI_First_All.append(PI_First)
     Font_All.append(Font_Size)
+    CPI_All.append(CPI)
+    CPI_Lines_All.append(CPI_Lines)
+    LPI_All.append(LPI)
+    LPI_Pages_All.append(LPI_Pages)
     PhD_Year_All.append(PhD_Year)
     PhD_Page_All.append(list(np.unique(PhD_Page)))
     Zipcode_All.append(PI_Zip)
@@ -571,6 +590,10 @@ for p, pval in enumerate(PDF_Files):
         PI_Last_All.append(sPI[1])
         PI_First_All.append(sPI[0])
         Font_All.append(Font_Size)
+        CPI_All.append(CPI)
+        CPI_Lines_All.append(CPI_Lines)
+        LPI_All.append(LPI)
+        LPI_Pages_All.append(LPI_Pages)
         PhD_Year_All.append(sPI_PhD_Year)
         PhD_Page_All.append(list(np.unique(sPI_PhD_Page)))
         Zipcode_All.append(PI_Zip)
@@ -580,7 +603,8 @@ for p, pval in enumerate(PDF_Files):
         CoI_Gender_All.append(CoI_Gender)
         Budget_All.append(Budget)     
 
-d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All, 'Font_Size': Font_All, 
+d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All, 
+     'Font_Size': Font_All, 'CPI': CPI_All, 'CPI_Lines': CPI_Lines_All, 'LPI': LPI_All, 'LPI_Pages': LPI_Pages_All,
      'PhD_Year': PhD_Year_All, 'PhD_Page': PhD_Page_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 
      'Org_Name': Org_All, 'Org_Type': Org_Type_All, 'CoI_Gender': CoI_Gender_All, 'Budget_Total_Yr1': Budget_All}
 df = pd.DataFrame(data=d)
