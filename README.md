@@ -25,9 +25,14 @@ This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, atte
   - The median font size used in the proposal is calculated, and a warning is given when <=11.8 pt (e.g., for checking compliance)
   - A histogram of the font sizes (based on each PDF ["span"](https://pymupdf.readthedocs.io/en/latest/faq.html#how-to-analyze-font-characteristics)) can be saved to the specified output directory (right now this isn't an active feature, which is a fancy way of saying I commented it out).
   
+* Lines per inch (LPI) and counts per inch (CPI)
+  - LPI is calculated per page and a warning is given for LPI > 5.5 with the page number
+  - CPI is calculated per line and a warning is given for CPI > 16.0 with the line text
+  - Note that PDF formats are weird, so these calculations are difficult and results should be checked.
+ 
 * PhD Year (useful for identifying early career proposers)
   - The PhD year of the PI is extracted from the CV that is included within the PDF after the main proposal 
-  - When extracted, the PhD year is correct in ~95% of cases (in some cases, no PhD year can be found)
+  - When extracted, the PhD year is correct in ~95% of cases (in some cases, no PhD year can be found, or a PhD year isn't provided in the proposal)
   - The text from which the year was guessed, and the page of the proposal from which it was extracted, are printed to the screen and useful for double checking
 
 * Demographic information
@@ -35,6 +40,7 @@ This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, atte
   - Zipcode of the PI (useful for geographic analysis)
   - Organization type (specified by the PI via NSPIRES)
   - Number of male and female Co-I's (based on inferred gender, as for the PI)
+
   
 ### check_dapr.py
 
