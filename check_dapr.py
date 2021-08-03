@@ -7,7 +7,7 @@ Script to check DAPR compliance in NSPIRES proposals
 
 # ============== Import Packages ================
 
-import sys, os, glob, re
+import sys, os, glob, re, pdb
 import numpy as np
 import pandas as pd
 
@@ -135,7 +135,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     # pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
 
     ### GET ALL DAPR WORDS
-    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.']
+    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ']
     dw = dw + pi_orgs + [pi_name] + [pi_city]
     dw = np.unique(dw).tolist()
 
@@ -213,8 +213,9 @@ def get_pages(d):
         if ref_end < ref_start:
             ref_end = -100
     if stm_end - stm_start <= 5:
-        ### IF STM SECTION REALLY SHORT, ASSUME 15 PAGES AND FLAG
-        stm_end, tcs = np.min([stm_start+15, pn]), 'yellow'
+        ### IF STM SECTION REALLY SHORT, ASSUME PTOT PAGES AND FLAG
+        ptot = 15
+        stm_end, tcs = np.min([stm_start+ptot-1, pn]), 'yellow'
     if (ref_end != -100) & (ref_start == -100) & (stm_end != -100):
         ### IF FOUND END BUT NOT START OF REFERENCES, ASSUME REFS START RIGHT AFTER STM BUT FLAG
         ref_start, tcr = stm_end + 1, 'yellow'
@@ -240,11 +241,11 @@ def get_pages(d):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path  = '../panels/HW20/pdfs-HW20_2-Anon'
+PDF_Path  = '../../proposal_pdfs/'
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*anonproposal.pdf')))
-PS_File = '../panels/HW20/HW20-ProposalMaster.csv'
+PS_File = 'ProposalMaster.csv'
 
 ### ARRAYS TO FILL
 Prop_Nb_All, Font_Size_All, N_Brac_All, N_EtAl_All = [], [], [], []
@@ -255,7 +256,7 @@ DW_All, DWC_All, DWP_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = '20-'+pval.split('-')[-2]+'-'+(pval.split('-')[-1]).split('_')[0]
+    Prop_Nb = '21-'+pval.split('-')[-2]+'-'+(pval.split('-')[-1]).split('_')[0]
     # Prop_Nb = '20-'+pval.split('_')[3]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
