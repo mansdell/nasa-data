@@ -477,8 +477,11 @@ def get_demographics(doc, pi_first):
     try:
         bt = float((((cp[cp.index('Total Budget'):cp.index('Year 1 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
         b1 = float((((cp[cp.index('Year 1 Budget'):cp.index('Year 2 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+        b2 = float((((cp[cp.index('Year 2 Budget'):cp.index('Year 3 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+        b3 = float((((cp[cp.index('Year 3 Budget'):cp.index('Year 4 Budget')]).split('\n')[1]).split('-')[0]).replace(',',''))
+        b4 = float((((cp[cp.index('Year 4 Budget'):cp.index('SECTION II -')]).split('\n')[1]).split('-')[0]).replace(',',''))
     except ValueError:
-        bt, b1 = -99.0, -99.0
+        bt, b1, b2, b3, b4 = -99.0, -99.0, -99.0, -99.0, -99.0
 
     ### PRINT OUT
     print(f'\n\tGender (Guess):\t\t{gndr} ({pi_first})')
@@ -514,14 +517,14 @@ def get_demographics(doc, pi_first):
     if org_type == '':
         org_type = 'Not Specified'
 
-    return gndr, org_name, org_type, zip_code, coi, [bt, b1], spi
+    return gndr, org_name, org_type, zip_code, coi, [bt, b1, b2, b3, b4], spi
 
 
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/'
-Out_Path  = '../panels/' 
+PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2021/XRP_Proposals_2021'
+Out_Path  = '../panels/XRP' 
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
@@ -606,6 +609,6 @@ for p, pval in enumerate(PDF_Files):
 d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All, 
      'Font_Size': Font_All, 'CPI': CPI_All, 'CPI_Lines': CPI_Lines_All, 'LPI': LPI_All, 'LPI_Pages': LPI_Pages_All,
      'PhD_Year': PhD_Year_All, 'PhD_Page': PhD_Page_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 
-     'Org_Name': Org_All, 'Org_Type': Org_Type_All, 'CoI_Gender': CoI_Gender_All, 'Budget_Total_Yr1': Budget_All}
+     'Org_Name': Org_All, 'Org_Type': Org_Type_All, 'CoI_Gender': CoI_Gender_All, 'Budget_Total_Years': Budget_All}
 df = pd.DataFrame(data=d)
 df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
