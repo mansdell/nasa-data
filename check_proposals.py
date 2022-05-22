@@ -40,10 +40,10 @@ def get_text(d, pn):
     """
                 
     ### LOAD PAGE
-    p = d.loadPage(int(pn))
+    p = d.load_page(int(pn))
 
     ### GET RAW TEXT
-    t = p.getText("text")
+    t = p.get_text("text")
 
     ### FIX ENCODING
     t = t.encode('utf-8', 'replace').decode()
@@ -149,10 +149,10 @@ def get_fonts(doc, pn):
     """
 
     ### LOAD PAGE
-    page = doc.loadPage(int(pn))
+    page = doc.load_page(int(pn))
 
     ### READ PAGE TEXT AS DICTIONARY (BLOCKS == PARAGRAPHS)
-    blocks = page.getText("dict", flags=11)["blocks"]
+    blocks = page.get_text("dict", flags=11)["blocks"]
 
     ### ITERATE THROUGH TEXT BLOCKS
     fn, fs, fc, ft = [], [], [], []
@@ -213,8 +213,8 @@ def get_phd_data(doc, ps, pi):
         if (any([x in text for x in cv_words])) & (pi in text[0:int(len(text)/4)]):
 
             ### USE STRUCTURE OF PDF PAGE
-            page = doc.loadPage(int(val))
-            blocks = page.getText("dict", flags=11)["blocks"]
+            page = doc.load_page(int(val))
+            blocks = page.get_text("dict", flags=11)["blocks"]
             for b in blocks:
                 for l, lval in enumerate(b["lines"]):
                     for s, sval in enumerate(lval["spans"]):
@@ -520,11 +520,46 @@ def get_demographics(doc, pi_first):
     return gndr, org_name, org_type, zip_code, coi, [bt, b1, b2, b3, b4], spi
 
 
+def check_DMP(doc, ps, pe):
+
+    ### LOOP THROUGH EACH PAGE IN PROPOSAL
+    dmp_page, prop_page = '', ''
+    for n, nval in enumerate(np.arange(ps, pe + 1)):
+
+        ### SEARCH PAGE TEXT FOR DMP MENTION
+        tp = (get_text(doc, nval)).lower()
+        if 'data management plan' in tp:
+
+            ### ATTEMPT TO GET PAGE LABELED IN PROPOSAL
+            ### NEED TO MAKE MORE ELEGANT WAY TO DO THIS
+            pp = [int(s) for s in tp[-20:].split() if s.isdigit()] + [int(s) for s in tp[:20].split() if s.isdigit()]
+            if len(pp) == 0:
+                pp = [int(s) for s in tp[:200].split() if s.isdigit()]
+
+            ### SAVE STUFF
+            if (len(pp) != 0):
+                dmp_page = nval+1
+                prop_page = np.max(np.array(pp)[np.where(np.array(pp) < 100)])
+            else:
+                dmp_page = nval+1
+                prop_page = ''
+
+    if dmp_page == '':
+        print(colored(f'\n\tDMP not found in STM', 'yellow', attrs=['bold']))
+    else:
+        print(f'\n\tDMP found in STM on page {dmp_page} [{prop_page}]')
+
+    return (dmp_page)
+
+
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = '../panels/XRP/XRP_Proposals_2014_2021/XRP_Proposals_2021'
-Out_Path  = '../panels/XRP' 
+PDF_Path  = 'proposals
+Out_Path  = '~/Desktop' 
+
+### SET OTHER FLAGS
+Check_DMP = False
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
@@ -556,7 +591,7 @@ for p, pval in enumerate(PDF_Files):
     print("\n\tSample of first page:\t" + textwrap.shorten((get_text(Doc, Page_Start)[300:400]), 60))
     print("\tSample of mid page:\t"     + textwrap.shorten((get_text(Doc, Page_Start + 8)[300:400]), 60))
     print("\tSample of last page:\t"    + textwrap.shorten((get_text(Doc, Page_End)[300:400]), 60))  
-    
+
     ### CHECK FONT/TEXT COMPLIANCE
     Font_Size, CPI, CPI_Lines, LPI, LPI_Pages = check_compliance(Doc, Page_Start, Page_End)
 
@@ -567,6 +602,10 @@ for p, pval in enumerate(PDF_Files):
     ### DEMOGRAPHIC INFORMATION
     PI_Gender, PI_Org, PI_Org_Type, PI_Zip, CoI_Gender, Budget, sPI = get_demographics(Doc, PI_First)
 
+    ### CHECK DMP
+    if Check_DMP:
+        DMP_Page = check_DMP(Doc, Page_Start, Page_End)
+        
     ### SAVE STUFF
     Prop_Nb_All.append(Prop_Nb)
     PI_Last_All.append(PI_Last)
