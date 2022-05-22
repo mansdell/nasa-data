@@ -45,6 +45,7 @@ import gensim
 from gensim import corpora
 from nltk.collocations import *
 from nltk.stem.wordnet import WordNetLemmatizer
+from gensim.models import CoherenceModel
 from collections import Counter 
 
 ### FOR PLOTTING
@@ -52,8 +53,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pyLDAvis
-import pyLDAvis.gensim
-
+# import pyLDAvis.gensim
+import pyLDAvis.gensim_models as gensimvis
 
 # ============== Define Functions ===============
 
@@ -68,10 +69,10 @@ def get_text(d, pn):
     """
                 
     ### LOAD PAGE
-    p = d.loadPage(int(pn))
+    p = d.load_page(int(pn))
 
     ### GET RAW TEXT
-    t = p.getText("text")
+    t = p.get_text("text")
 
     ### FIX ENCODING
     t = t.encode('utf-8', 'replace').decode()
@@ -291,7 +292,7 @@ def plot_wc(opath, fn, wc, nbins=25):
     [ax.axvline(x, color='gray', linestyle=":") for x in [mu - std*2, mu + std*2]]
 
     ### CLEANUP
-    fig.savefig(os.path.join(opath, 'pp_wc_dist.pdf'), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
+    fig.savefig(os.path.join(opath, 'pp_wc_dist.pdf'), bbox_inches='tight', dpi=100)
     plt.close('all')
 
     ### RETURN PROPOSALS WITH CURIOUS WORD COUNTS
@@ -351,7 +352,7 @@ def plot_top_words(prefix, opath, wc, mc, expsig=3, mcb=[]):
     print("\n\tKeywords: " + textwrap.shorten(str(xlabs[0:ind+1]), 60))
 
     ### CLEANUP
-    fig.savefig(os.path.join(opath, prefix + '.pdf'), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
+    fig.savefig(os.path.join(opath, prefix + '.pdf'), bbox_inches='tight', dpi=100)
     plt.close('all')
 
     ### SAVE TOP WORDS
@@ -368,18 +369,18 @@ def exp_fit(x, a, b, c):
 # ====================== Set Inputs =======================
 
 ### SET THINGS TO DO
-Find_Keywords = False                                                      # GRAB KEYWORDS 
-Make_LDA_Models = False                                                    # MAKE LDA MODELS
-Apply_LDA_Models = True                                                  # APPLY LDA MODELS
+Find_Keywords = False                                                      # GRAB KEYWORDS (MUST DO BEFORE NEXT STEPS)
+Make_LDA_Models = True                                                    # MAKE LDA MODELS (CAN RUN INDEPENDENTLY OF FIND_KEYWORDS IF RUN ONCE ALREADY)
+Apply_LDA_Models = False                                                  # APPLY LDA MODELS
 
 ### SET I/O PATHS
-PDF_Path  = '../panels/ECA20_Proposals'                                   # PATH TO PROPOSAL PDFs
-Out_Path  = '../panels/ECA20_Output'                                      # PATH TO NPL OUTPUTS
+PDF_Path  = 'proposals'                  # PATH TO PROPOSAL PDFs
+Out_Path  = 'output'                              # PATH TO NPL OUTPUTS
 
 ### SET FILES FOR CLEANING TEXT
 Lemm_File = '../panels/nlp_words - lemmatize.csv'                         # ASTRO LEMMATIZE WORDS
 Remv_File = '../panels/nlp_words - stop.csv'                              # NLP WORDS TO REMOVE
-Remv_Prog_File = '../panels/nlp_words - eca.csv'                          # NLP WORDS TO REMOVE
+Remv_Prog_File = '../panels/nlp_words - xrp.csv'                          # NLP WORDS TO REMOVE
 
 
 # ====================== Main Code ========================
@@ -398,6 +399,7 @@ if Find_Keywords:
     for p, pval in enumerate(PDF_Files):
 
         ### OPEN PDF DOCUMENT
+        pval = str(pval)
         Doc = fitz.open(pval)
         
         ### GET PI NAME AND PROPOSAL NUMBER
@@ -462,8 +464,8 @@ if Find_Keywords:
             Vocab_All = Vocab_All + Text_Clean
 
             ### CHECK IF ML MENTIONED
-            ML_Words = ["machine learning", "deep learning", "artificial intelligence"]
-            ML_Count_All.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in ML_Words])))
+            # ML_Words = ["machine learning", "deep learning", "artificial intelligence"]
+            # ML_Count_All.append(np.sum(np.array([(Text_Proposal.lower()).count(x) for x in ML_Words])))
 
         else:
 
@@ -482,7 +484,6 @@ if Find_Keywords:
     print("\n\n")
 
 
-
 ### TO DO: PARAMETERIZE ALL THESE AND SAVE DICT/CORP + MODELS W/RANDOM SEED SET FOR EASY LOADING
 ### VIZUALIZE CATEGORIZATIONS
 
@@ -492,23 +493,38 @@ if Make_LDA_Models:
     Text_Clean_All = pickle.load(open(os.path.join(Out_Path, 'text_clean.pkl'), 'rb')) 
     df = pd.read_csv(os.path.join(Out_Path, 'keywords.csv'))
 
-    ### RUN LDA MODEL
-    ### set passes to high value; useful to see corpus many time for small datasets
-    ### chunksize is how many are seen at once; can effect results but not sure how
+    ### RESOURCES:
+    ### https://miningthedetails.com/blog/python/lda/GensimLDA/
+    ### https://radimrehurek.com/gensim/auto_examples/tutorials/run_lda.html
+    ### https://www.machinelearningplus.com/nlp/topic-modeling-gensim-python/
+    ### https://towardsdatascience.com/evaluate-topic-model-in-python-latent-dirichlet-allocation-lda-7d57484bb5d0
+
+    ### passes = how often model trained on entire corpus (i.e., epocs); set passes to high value if useful to see corpus many time for small datasets
+    ### chunksize = how many docs are seen at once; can effect results but not sure how (set to large number to see all at once)
     ### update_every=0 is batch learning (on all available data); slower but more accurate that than >=1 ‘online’ learning (mini-batch learning)
+    ### Look at log and make sure that by the final passes, most of the documents have converged. So you want to choose both passes and iterations to be high enough for this to happen.
+    ### In general a chunksize of 100k and update_every set to 1 is equivalent to a chunksize of 50k and update_every set to 2. The primary difference is that you will save some memory using the smaller chunksize
+    ### Passes are not related to chunksize or update_every
+
     ### alpha close to zero = fewer topics per document; auto = will be tuned automatically.
     ### alpha and eta can be thought of as smoothing parameters when we compute how much each document "likes" a topic (alpha) or how much each topic "likes" a word (eta)
     ### higher alpha makes the document preferences "smoother" over topics, and a higher eta makes the topic preferences "smoother" over words.
     ### when alpha is low, most of the weight in the topic distribution for this article goes to a single topic, but when it is high, the weight is much more evenly distributed across the topics.
     ### low eta results in higher weight placed on the top words and lower weight placed on the bottom words for each topic
     ### DEFAULTS: num_topics=100, id2word=None, distributed=False, chunksize=2000, passes=1, update_every=1, alpha='symmetric', eta=None, decay=0.5, offset=1.0, eval_every=10, iterations=50, gamma_threshold=0.001)
+
+    ### RUN LDA MODEL
     NumTopics = 3
     Dict = corpora.Dictionary(Text_Clean_All)
     Corp = [Dict.doc2bow(text) for text in Text_Clean_All]
     logging.basicConfig(filename=os.path.join(Out_Path, 'LDA_gensim.log'), format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
-    LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, passes=500, iterations=100, update_every=0,
-                                           eta = [0.001]*len(Dict.keys()), alpha=[0.001]*NumTopics, eval_every=10)
+    # LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, passes=500, iterations=100, update_every=0,
+    #                                        eta = [0.001]*len(Dict.keys()), alpha=[0.001]*NumTopics, eval_every=10)
+    LDAM = gensim.models.ldamodel.LdaModel(Corp, num_topics = NumTopics, id2word=Dict, chunksize=2000, 
+                                           passes=50, iterations=50, update_every=1, eval_every=30,
+                                           eta = 'auto', alpha='auto')
     topics = LDAM.print_topics(num_words=10)
+    print('\n')
     for topic in topics:
         print(topic)
 
@@ -528,15 +544,30 @@ if Make_LDA_Models:
     plt.savefig(os.path.join(Out_Path, "LDA_convergence_liklihood.pdf"))
     plt.close()
 
+    # Compute Perplexity
+    # How surprised model is when sees new data
+    # Lower perplexity = better model
+    print('\nPerplexity: ', LDAM.log_perplexity(Corp)) 
+
+    # Compute Coherence Score
+    # Degree of semantic similarity between high scoring words in the topic
+    # Higher coherence = topic is more human interpretable
+    coherence_model_lda = CoherenceModel(model=LDAM, texts=Text_Clean_All, dictionary=Dict, coherence='u_mass')
+    coherence_lda = coherence_model_lda.get_coherence()
+    print('Coherence Score: ', coherence_lda)
+
     ### MAKE NICE VISUALIZATION
-    vis = pyLDAvis.gensim.prepare(topic_model=LDAM, corpus=Corp, dictionary=Dict)
-    pyLDAvis.show(vis)
+    PreFixLDA = "LDA_NT-" + str(NumTopics) + '_'
+    vis = gensimvis.prepare(topic_model=LDAM, corpus=Corp, dictionary=Dict)
+    vis2 = pyLDAvis.display(vis)
+    with open(os.path.join(Out_Path, PreFixLDA + "viz.html"), "w") as file:
+        file.write(vis2.data)
+
     ### A good topic model will have fairly big, non-overlapping bubbles scattered throughout the chart instead of being clustered in one quadrant.
     ### A model with too many topics, will typically have many overlaps, small sized bubbles clustered in one region of the chart.
     ### area of circle represents the importance of each topic over the entire corpus, the distance between the center of circles indicate the similarity between topics
 
-    ### SAVE MODEL IF GOOD
-    PreFixLDA = "LDA_NT-" + str(NumTopics) + '_'
+    ### SAVE MODEL 
     pickle.dump(Corp, open(os.path.join(Out_Path, PreFixLDA + 'corpus.pkl'), 'wb'))
     Dict.save(os.path.join(Out_Path, PreFixLDA + 'dict.gensim'))
     LDAM.save(os.path.join(Out_Path, PreFixLDA + 'model5.gensim'))
