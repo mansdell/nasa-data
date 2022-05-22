@@ -29,10 +29,10 @@ import gender_guesser.detector as gender
 def get_text(d, pn):
                 
     ### LOAD PAGE
-    p = d.loadPage(int(pn))
+    p = d.load_page(int(pn))
 
     ### GET RAW TEXT
-    t = p.getText("text")
+    t = p.get_text("text")
 
     ### FIX ENCODING
     t = t.encode('utf-8', 'replace').decode()
@@ -43,10 +43,10 @@ def get_text(d, pn):
 def get_fonts(doc, pn):
 
     ### LOAD PAGE
-    page = doc.loadPage(int(pn))
+    page = doc.load_page(int(pn))
 
     ### READ PAGE TEXT AS DICTIONARY (BLOCKS == PARAGRAPHS)
-    blocks = page.getText("dict", flags=11)["blocks"]
+    blocks = page.get_text("dict", flags=11)["blocks"]
 
     ### ITERATE THROUGH TEXT BLOCKS
     fn, fs, fc, ft = [], [], [], []
@@ -121,11 +121,15 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     dfp = pd.read_csv(ps_file)
 
     ### GET PI INFO (iNSPIRES FORMAT)
-    pi_name = (dfp[dfp['Proposal Number'] == pn]['PI Last Name'].values[0]).split(',')[0]
-    pi_orgs = (dfp[dfp['Proposal Number'] == pn]['Linked Org'].values[0]).split(', ')
-    pi_orgs.append(dfp[dfp['Proposal Number'] == pn]['PI Company Name'].values[0])
+    pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')[0]
+    pi_orgs = (dfp[dfp['Response number'] == pn]['Linked Org'].values[0]).split(', ')
+    pi_orgs.append(dfp[dfp['Response number'] == pn]['Company name'].values[0])
     pi_orgs = np.unique(pi_orgs).tolist()
-    pi_city = (dfp[dfp['Proposal Number'] == pn]['PI City'].values[0]).split(',')[0]
+    pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
+
+    ### REMOVE 'nan' ENTRIES THAT CAN HAPPEN FOR ORG LIST
+    if 'nan' in pi_orgs:
+        pi_orgs.remove('nan')
 
     ### GET PI INFO (OTHER FORMAT)
     # pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')[0]
@@ -135,7 +139,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     # pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
 
     ### GET ALL DAPR WORDS
-    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ']
+    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ', ' her ', ' his ']
     dw = dw + pi_orgs + [pi_name] + [pi_city]
     dw = np.unique(dw).tolist()
 
@@ -241,11 +245,11 @@ def get_pages(d):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path  = '../../proposal_pdfs/'
+PDF_Path  = 'proposals'
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*anonproposal.pdf')))
-PS_File = 'ProposalMaster.csv'
+PS_File = 'proposal_master.csv'
 
 ### ARRAYS TO FILL
 Prop_Nb_All, Font_Size_All, N_Brac_All, N_EtAl_All = [], [], [], []
@@ -257,10 +261,12 @@ for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
     Prop_Nb = '21-'+pval.split('-')[-2]+'-'+(pval.split('-')[-1]).split('_')[0]
+    # Prop_Nb = '21-'+pval.split('-')[-2].split('_2')[0]+'-' + (pval.split('-')[-1]).split('_')[0]
     # Prop_Nb = '20-'+pval.split('_')[3]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
+    pval = str(pval)
     Doc = fitz.open(pval)
     STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc)
     if Tot_Pages == 0:
