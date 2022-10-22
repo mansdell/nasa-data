@@ -159,7 +159,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
     ### GET ALL DAPR WORDS
     # dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ', ' her ', ' his ']
-    dw = ['she', 'he', 'her', 'his', 'him']
+    dw = ['she', 'he', 'her', 'hers', 'his', 'him']
     dw = dw + pi_orgs + pi_name + pi_city
     dw = np.unique(dw).tolist()
         
