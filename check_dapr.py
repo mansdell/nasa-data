@@ -102,7 +102,7 @@ def check_ref_type(doc, ps, pe):
 
     ### CHECK FOR DAPR COMPLIANCE
     n_brac = len([i.start() for i in re.finditer(']', tp)])
-    n_etal = len([i.start() for i in re.finditer('et al', tp)])
+    n_etal = len([i.start() for i in re.finditer(r'\bet al\b', tp)])
     if n_brac < 10:
         print("\n\t# [] refs:\t", colored(str(n_brac), 'red'))
     else:
@@ -121,15 +121,34 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     dfp = pd.read_csv(ps_file)
 
     ### GET PI INFO (iNSPIRES FORMAT)
-    pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')[0]
-    pi_orgs = (dfp[dfp['Response number'] == pn]['Linked Org'].values[0]).split(', ')
-    pi_orgs.append(dfp[dfp['Response number'] == pn]['Company name'].values[0])
-    pi_orgs = np.unique(pi_orgs).tolist()
-    pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
+    pi_name = (dfp[dfp['Proposal Number'] == pn]['PI Last Name'].values[0]).split(',')
+    pi_orgs = (dfp[dfp['Proposal Number'] == pn]['Linked Org'].values[0]).split(', ')
+    pi_orgs.append(dfp[dfp['Proposal Number'] == pn]['PI Company Name'].values[0])
+    pi_city = (dfp[dfp['Proposal Number'] == pn]['PI City'].values[0]).split(',')[0]
 
-    ### REMOVE 'nan' ENTRIES THAT CAN HAPPEN FOR ORG LIST
+    ### GET OTHER TEAM MEMBER NAMES
+    for i, val in enumerate(np.arange(14)+1):
+        col = f"Member - {val} Member SUID; Name; Role; Email; Organization; Phone"
+        if col not in dfp.columns:
+            break
+        if pd.isnull(dfp[dfp['Proposal Number'] == pn][col].values[0]):
+            break
+        else:
+            tm_name = dfp[dfp['Proposal Number'] == pn][col].values[0].split('; ')[1].split(', ')[0]
+            tm_orgs = dfp[dfp['Proposal Number'] == pn][col].values[0].split('; ')[4].split(', ')[0]
+            pi_name.append(tm_name)
+            pi_orgs.append(tm_orgs)
+    
+    ### CLEAN THINGS UP
+    pi_orgs = np.unique(pi_orgs).tolist()
+    pi_name = np.unique(pi_name).tolist()
+    pi_city = np.unique(pi_city).tolist()
     if 'nan' in pi_orgs:
         pi_orgs.remove('nan')
+    if '' in pi_orgs:
+        pi_orgs.remove('')
+    if ';' in pi_orgs:
+        pi_orgs.remove(';')
 
     ### GET PI INFO (OTHER FORMAT)
     # pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')[0]
@@ -139,10 +158,11 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     # pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
 
     ### GET ALL DAPR WORDS
-    dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ', ' her ', ' his ']
-    dw = dw + pi_orgs + [pi_name] + [pi_city]
+    # dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ', ' her ', ' his ']
+    dw = [' she ', ' he ', ' her ', ' his ']
+    dw = dw + pi_orgs + pi_name + pi_city
     dw = np.unique(dw).tolist()
-
+        
     ### GET PAGE NUMBERS WHERE DAPR WORDS APPEAR
     ### IGNORES REFERENCE SECTION, IF KNOWN
     dwp = []
@@ -150,7 +170,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         if pd.isnull(ival):
             continue
         pn = []
-        for n, nval in enumerate(np.arange(stm_pages[0], doc.pageCount)):
+        for n, nval in enumerate(np.arange(stm_pages[0], doc.page_count)):
             if (nval >= np.min(ref_pages)) & (nval <= np.max(ref_pages)) & (np.min(ref_pages) > 5):
                 continue
             tp = (get_text(doc, nval)).lower()
@@ -172,10 +192,10 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     return dww, dwcc, dwpp
 
 
-def get_pages(d):
+def get_pages(d, stm_pl=10):
 
     ### GET TOTAL NUMBER OF PAGES IN PDF
-    pn = d.pageCount
+    pn = d.page_count
 
     ### LOOP THROUGH PDF PAGES
     stm_start, stm_end, ref_start, ref_end, ref_end_bu = 0, -100, -100, -100, -100
@@ -194,22 +214,19 @@ def get_pages(d):
             continue
 
         ### FIND STM END AND REFERENCES START
-        if (stm_start != -100) & (('reference' in t2) & ('reference' not in t1)) | (('bibliography' in t2) & ('bibliography' not in t1)):
+        if (stm_start != -100) & (('references' in t2) & ('references' not in t1)) | (('bibliography' in t2) & ('bibliography' not in t1)) | (('citations' in t2) & ('citations' not in t1)):
             stm_end = val
             ref_start = val + 1
-            continue
 
-        ### REFERENCE END BACK-UP
-        if (ref_start != -100) & (('budget' in t2) & ('budget' not in t1)):
-            ref_end_bu = val
-            
         ### FIND REF END 
-        w1, w2, w3, w4, w5, w6 = 'data management', 'budget justification', 'work plan', 'budget narrative', 'work effort', 'total budget'
+        # w1, w2, w3, w4, w5, w6, w7 = 'data management', 'budget justification', 'work plan', 'budget narrative', 'work effort', 'total budget'
+        # if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)):
+        w1, w2, w3, w4, w5, w6 = 'budget justification', 'budget narrative', 'total budget', 'table of work effort', 'data management', 'table of personnel'
         if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)):
             ref_end = val
-            if (ref_start != -100) & (ref_end > ref_start) & (stm_end - stm_start > 10):
+            if (ref_start != -100) & (ref_end > ref_start) & (stm_end - stm_start > stm_pl-5):
                 break
-    
+
     ### FIX SOME THINGS BASED ON COMMON SENSE
     if ref_end < ref_start:
         ### USE SIMPLE "BUDGET" FLAG IF WE HAVE TO
@@ -217,9 +234,8 @@ def get_pages(d):
         if ref_end < ref_start:
             ref_end = -100
     if stm_end - stm_start <= 5:
-        ### IF STM SECTION REALLY SHORT, ASSUME PTOT PAGES AND FLAG
-        ptot = 15
-        stm_end, tcs = np.min([stm_start+ptot-1, pn]), 'yellow'
+        ### IF STM SECTION REALLY SHORT, ASSUME ALL PAGES USED AND FLAG
+        stm_end, tcs = np.min([stm_start+stm_pl-1, pn]), 'yellow'
     if (ref_end != -100) & (ref_start == -100) & (stm_end != -100):
         ### IF FOUND END BUT NOT START OF REFERENCES, ASSUME REFS START RIGHT AFTER STM BUT FLAG
         ref_start, tcr = stm_end + 1, 'yellow'
@@ -228,7 +244,6 @@ def get_pages(d):
         ref_end, tcr = pn-1, 'yellow'
     if (tcr == 'yellow') | (tcs == 'yellow'):
         pflag='YES'
-
 
     ### IF PROPOSAL INCOMPLETE (E.G., WITHDRAWN) RETURN NOTHING
     if pn - stm_start < 3:
@@ -245,11 +260,11 @@ def get_pages(d):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path  = 'proposals'
+PDF_Path  = '/Users/mansdell/OneDrive - NASA/proposal_pdfs/MMXPSP/MMXPSP22-Anon'
 
 ### GET LIST OF PDF FILES
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*anonproposal.pdf')))
-PS_File = 'proposal_master.csv'
+PS_File = '/Users/mansdell/OneDrive - NASA/proposal_pdfs/MMXPSP/MMXPSP22_ProposalMaster.csv'
 
 ### ARRAYS TO FILL
 Prop_Nb_All, Font_Size_All, N_Brac_All, N_EtAl_All = [], [], [], []
@@ -259,8 +274,11 @@ DW_All, DWC_All, DWP_All = [], [], []
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
+    # if p != 1:
+    #     continue
+
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = '21-'+pval.split('-')[-2]+'-'+(pval.split('-')[-1]).split('_')[0]
+    Prop_Nb = pval.split('/')[-1].split('_anonproposal')[0]
     # Prop_Nb = '21-'+pval.split('-')[-2].split('_2')[0]+'-' + (pval.split('-')[-1]).split('_')[0]
     # Prop_Nb = '20-'+pval.split('_')[3]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
