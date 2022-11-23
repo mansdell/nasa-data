@@ -100,11 +100,29 @@ def check_ref_type(doc, ps, pe):
         tp = tp + ' ' + get_text(doc, nval)
     tp = tp.lower()
 
-    ### CHECK FOR DAPR COMPLIANCE
-    n_brac = len([i.start() for i in re.finditer(']', tp)])
+    ### GET NUMBER OF BRACKETED REFERENCES
+    n_brac = 0
+    i_brac = [i.start() for i in re.finditer(']', tp)]
+    for i, val in enumerate(i_brac):
+        if tp[val-1].isnumeric():
+            n_brac += 1
+
+    ### ALSO GET NUMBER OF POSSIBLE PARENTHETICAL REFERENCES
+    ### MATCHES REQUIRE NUMBER WITHIN PARENTHASES < 200 (ASSUMES <200 REFS; HELPS CATCH YEARS IN PARENTHESIS)
+    n_para = 0
+    para_vals = [x for x in re.findall('\(([^)]+)', tp) if x.isnumeric()]
+    for i, val in enumerate(para_vals):
+        if int(val) < 200:
+            n_para += 1
+
+    ### CHECK FOR NUMBER OF ET AL REFERENCES
     n_etal = len([i.start() for i in re.finditer(r'\bet al\b', tp)])
+
+    ### PRINT TO SCREEN
     if n_brac < 10:
         print("\n\t# [] refs:\t", colored(str(n_brac), 'red'))
+        if n_para > 20:
+            print("\tUsed () instead of []? # () refs:\t", colored(str(n_para), 'red'))
     else:
         print("\n\t# [] refs:\t", str(n_brac))
     if n_etal > 10:
@@ -112,13 +130,21 @@ def check_ref_type(doc, ps, pe):
     else:
         print("\t# et al. refs:\t", str(n_etal), '\n')
 
-    return n_brac, n_etal
+    return n_brac, n_etal, n_para
         
 
 def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
     ### LOAD PROPOSAL MASTER FILE FROM NSPIRES
     dfp = pd.read_csv(ps_file)
+
+    ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER 
+    if len (dfp[dfp['Proposal Number'] == pn]) == 0:
+        print("\n\tNo matches found in Proposal Master for this proposal number")
+        print("\tCheck for differences in proposal number format between PDF filenames and Proposal Master")
+        print(f"\tTest: {pn} vs. {dfp['Proposal Number'][0]} --> Update Prop_Nb if needed")
+        print("\tQuitting program\n")
+        sys.exit()
 
     ### GET PI INFO (iNSPIRES FORMAT)
     pi_name = (dfp[dfp['Proposal Number'] == pn]['PI Last Name'].values[0]).split(',')
@@ -159,8 +185,8 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
     ### GET ALL DAPR WORDS
     # dw = ['our group', 'our team', 'our work', 'our previous', 'my group', 'my team', 'university', 'department', 'dept.', ' she ', ' he ', ' her ', ' his ']
-    dw = ['she', 'he', 'her', 'hers', 'his', 'him']
-    dw = dw + pi_orgs + pi_name + pi_city
+    dw_gp = ['she', 'he', 'her', 'hers', 'his', 'him']
+    dw = dw_gp + pi_orgs + pi_name + pi_city
     dw = np.unique(dw).tolist()
         
     ### GET PAGE NUMBERS WHERE DAPR WORDS APPEAR
@@ -173,14 +199,19 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
             if (nval >= np.min(ref_pages)) & (nval <= np.max(ref_pages)) & (np.min(ref_pages) > 5):
                 continue
             tp = (get_text(doc, nval)).lower()
-            wc = len([i.start() for i in re.finditer(r'\b' + re.escape(ival.lower()) + r'\b', tp)])
-            if wc != 0:
-                dwp.append(nval)
-                dwc.append(wc) 
-                dww.append(ival)
-                print(f'\t"{ival}" found {wc} times on pages {nval+1}')
+            wi = [[i.start(), i.end()] for i in re.finditer(r'\b' + re.escape(ival.lower()) + r'\b', tp)]
+            for m, mval in enumerate(wi):
 
-    return dww, dwc, dwp
+                ### CHECK IF GENDER PRONOUN CATCHES ARE ACTUALLY HE/SHE, HIM/HER, ETC.
+                ### ONLY SAVE DW INFO IF NOT
+                if ival in dw_gp:
+                    if not (tp[mval[0]-1] == '/') | (tp[mval[1]] == '/'):
+                        dwp.append(nval)
+                        dwc.append(len(wi)) 
+                        dww.append(ival)
+                        print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
+
+    return dww, dwc, dwp, pi_name
     
 
 def get_pages(d, stm_pl=10):
@@ -251,27 +282,36 @@ def get_pages(d, stm_pl=10):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path  = './Anon_Proposals'
+PDF_Path = './Anon_Proposals'
 
 ### GET LIST OF PDF FILES
-PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*anonproposal.pdf')))
+### CHANGE 'anonproposals' if NRESS USED DIFFERENT SUFFIX
+PDF_Suffix = '_anonproposal'
+PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
+if len(PDF_Files) == 0:
+    print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
+    sys.exit()
+
+### GET PROPOSAL MASTER
 PS_File = './ProposalMaster.csv'
+if os.path.isfile(PS_File) == False:
+    print("\nNo Proposal Master file found in path set by PS_File\nCheck path for Proposal Master\nQuitting program\n")
+    sys.exit()  
 
 ### ARRAYS TO FILL
-Prop_Nb_All, Font_Size_All, N_Brac_All, N_EtAl_All = [], [], [], []
+Prop_Nb_All, TMN_All, Font_Size_All, N_Brac_All, N_EtAl_All, N_Para_All = [], [], [], [], [], []
 STM_Pages_All, Ref_Pages_All, pFlag_All = [], [], []
 DW_All, DWC_All, DWP_All = [], [], []
 
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
-    # if p != 1:
-    #     continue
+    if p > 5:
+        continue
 
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = pval.split('/')[-1].split('_anonproposal')[0]
+    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
     # Prop_Nb = '21-'+pval.split('-')[-2].split('_2')[0]+'-' + (pval.split('-')[-1]).split('_')[0]
-    # Prop_Nb = '20-'+pval.split('_')[3]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
@@ -286,25 +326,29 @@ for p, pval in enumerate(PDF_Files):
     Font_Size = get_median_font(Doc, STM_Pages[0], STM_Pages[1])
 
     ### CHECK DAPR REFERENCING COMPLIANCE
-    N_Brac, N_EtAl = check_ref_type(Doc, STM_Pages[0], STM_Pages[1])
+    N_Brac, N_EtAl, N_Para = check_ref_type(Doc, STM_Pages[0], STM_Pages[1])
 
-    ### CHECK DAPR WORDS
-    DW, DWC, DWP = check_dapr_words(Doc, PS_File, Prop_Nb, STM_Pages, Ref_Pages)
+    ### CHECK DAPR WORDS (AND GRAB TEAM MEMBER NAMES)
+    DW, DWC, DWP, TMN = check_dapr_words(Doc, PS_File, Prop_Nb, STM_Pages, Ref_Pages)
 
     ### RECORD STUFF
     Prop_Nb_All.append(Prop_Nb)
     Font_Size_All.append(Font_Size)
     N_Brac_All.append(N_Brac)
     N_EtAl_All.append(N_EtAl)
+    N_Para_All.append(N_Para)
     STM_Pages_All.append((np.array(STM_Pages) + 1).tolist())
     Ref_Pages_All.append((np.array(Ref_Pages) + 1).tolist())
     pFlag_All.append(pFlag)
     DW_All.append(DW)
     DWC_All.append(DWC)
-    DWP_All.append(DWP)
+    DWP_All.append((np.array(DWP) + 1).tolist())
+    TMN_All.append(TMN)
+
 
 ### OUTPUT TO DESKTOP
-d = {'Prop_Nb': Prop_Nb_All, 'Font Size': Font_Size_All, 'N_Brac': N_Brac_All, 'N_EtAl':N_EtAl_All,
+d = {'Prop_Nb': Prop_Nb_All, 'Team Members': TMN_All, 'Font Size': Font_Size_All, 
+     'N_Brac': N_Brac_All, 'N_EtAl':N_EtAl_All, 'N_Para':N_Para_All,
      'STM_Pages': STM_Pages_All, 'Ref Pages': Ref_Pages_All, 'Flag Pages': pFlag_All,
      'DAPR_Words': DW_All, 'DAPR_Word_Count': DWC_All, 'DAPR_Word_Pages': DWP_All}
 df = pd.DataFrame(data=d)
