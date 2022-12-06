@@ -306,9 +306,6 @@ DW_All, DWC_All, DWP_All = [], [], []
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
-    if p > 5:
-        continue
-
     ### GET PROPOSAL FILE NAME
     Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
     # Prop_Nb = '21-'+pval.split('-')[-2].split('_2')[0]+'-' + (pval.split('-')[-1]).split('_')[0]
