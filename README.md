@@ -44,7 +44,7 @@ This code reads in an NSPIRES-formatted PDF submitted to a NASA ROSES call, atte
   
 ### check_dapr.py
 
-This code reads in an anonymized proposal submitted to a ROSES program that follows Dual-Anonymouse Peer Reivew (DAPR). It attempts to find the different sections of the proposal (STM, DMP, Relevance, Budget) and then checks a variety of things to make sure it is DAPR compliant. The outputs are described below:
+This code reads in an anonymized proposal submitted to a ROSES program that follows Dual-Anonymouse Peer Reivew (DAPR); can be redacted NSPIRES-generated PDF or just the anonymized proposal PDF. The code attempts to find the different sections of the proposal (STM, DMP, Relevance, Budget) and then checks a variety of things to make sure it is DAPR compliant. The outputs are described below:
 
 * Page ranges for propsal sections
   - These assume the following order: STM, References, DMP, Relevance, Budget
