@@ -139,7 +139,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     dfp = pd.read_csv(ps_file)
 
     ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER 
-    if len (dfp[dfp['Proposal Number'] == pn]) == 0:
+    if len (dfp[dfp['Response number'] == pn]) == 0:
         print("\n\tNo matches found in Proposal Master for this proposal number")
         print("\tCheck for differences in proposal number format between PDF filenames and Proposal Master")
         print(f"\tTest: {pn} vs. {dfp['Proposal Number'][0]} --> Update Prop_Nb if needed")
@@ -147,21 +147,21 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         sys.exit()
 
     ### GET PI INFO (iNSPIRES FORMAT)
-    pi_name = (dfp[dfp['Proposal Number'] == pn]['PI Last Name'].values[0]).split(',')
-    pi_orgs = (dfp[dfp['Proposal Number'] == pn]['Linked Org'].values[0]).split(', ')
-    pi_orgs.append(dfp[dfp['Proposal Number'] == pn]['PI Company Name'].values[0])
-    pi_city = (dfp[dfp['Proposal Number'] == pn]['PI City'].values[0]).split(',')[0]
+    pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')
+    pi_orgs = (dfp[dfp['Response number'] == pn]['Linked Org'].values[0]).split(', ')
+    pi_orgs.append(dfp[dfp['Response number'] == pn]['Company name'].values[0])
+    pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
 
     ### GET OTHER TEAM MEMBER NAMES
     for i, val in enumerate(np.arange(14)+1):
         col = f"Member - {val} Member SUID; Name; Role; Email; Organization; Phone"
         if col not in dfp.columns:
             break
-        if pd.isnull(dfp[dfp['Proposal Number'] == pn][col].values[0]):
+        if pd.isnull(dfp[dfp['Response number'] == pn][col].values[0]):
             break
         else:
-            tm_name = dfp[dfp['Proposal Number'] == pn][col].values[0].split('; ')[1].split(', ')[0]
-            tm_orgs = dfp[dfp['Proposal Number'] == pn][col].values[0].split('; ')[4].split(', ')[0]
+            tm_name = dfp[dfp['Response number'] == pn][col].values[0].split('; ')[1].split(', ')[0]
+            tm_orgs = dfp[dfp['Response number'] == pn][col].values[0].split('; ')[4].split(', ')[0]
             pi_name.append(tm_name)
             pi_orgs.append(tm_orgs)
     
@@ -214,7 +214,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     return dww, dwc, dwp, pi_name
     
 
-def get_pages(d, stm_pl=10):
+def get_pages(d, stm_pl=15):
 
     ### GET TOTAL NUMBER OF PAGES IN PDF
     pn = d.page_count
@@ -282,11 +282,11 @@ def get_pages(d, stm_pl=10):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path = './Anon_Proposals'
+PDF_Path = './Proposals'
 
 ### GET LIST OF PDF FILES
-### CHANGE 'anonproposals' if NRESS USED DIFFERENT SUFFIX
-PDF_Suffix = '_anonproposal'
+### CHANGE IF NRESS USED DIFFERENT SUFFIX
+PDF_Suffix = '_Redacted'
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
 if len(PDF_Files) == 0:
     print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
@@ -314,12 +314,18 @@ for p, pval in enumerate(PDF_Files):
     ### GET PAGES OF PROPOSAL
     pval = str(pval)
     Doc = fitz.open(pval)
-    STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc)
+    STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc)        
     if Tot_Pages == 0:
         print(f'\n\tProposal incomplete, skipping')
         continue
 
-    ### CHECK FONT SIZE COMPLIANCE
+    ### FIX ANY PROPOSALS THAT COULDN'T FIND REFERENCE SECTION (PAGE NUMBERS ARE FROM PDF, NOT PYTHON ZERO BASE)
+    Prop_Nb_Fix, Ref_Pages_Fix = ['22-HW22_2-0005', '22-HW22_2-0048'], [[41, 47], [40,40]]
+    if Prop_Nb in Prop_Nb_Fix:
+        print(colored(f"\t\tRef_Fixed = {Ref_Pages[0], Ref_Pages[1]}", 'yellow'))
+        Ref_Pages = [Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0]-1, Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]-1]
+
+    ### CHECK FONT SIZE COMPLIANCE 
     Font_Size = get_median_font(Doc, STM_Pages[0], STM_Pages[1])
 
     ### CHECK DAPR REFERENCING COMPLIANCE
