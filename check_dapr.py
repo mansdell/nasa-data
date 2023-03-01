@@ -289,14 +289,11 @@ PDF_Path = './Proposals'
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
 ### IF USING FULL NSPIRES PROPOSALS, USE SUFFIX = '.pdf'
-PDF_Suffix = '.pdf'
-if PDF_Suffix != '.pdf':
-    PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
-    if len(PDF_Files) == 0:
-        print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
-        sys.exit()
-else:
-    PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
+PDF_Suffix = '_anonproposal'
+PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
+if len(PDF_Files) == 0:
+    print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
+    sys.exit()
 
 ### GET PROPOSAL MASTER
 PS_File = './Master.csv'
@@ -313,10 +310,7 @@ DW_All, DWC_All, DWP_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
-    if PDF_Suffix != '.pdf':
-        Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
-    else:
-        Prop_Nb = '-'.join(pval.split('/')[-1].split('-')[0:-1])  
+    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
