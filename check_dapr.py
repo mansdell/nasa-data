@@ -138,8 +138,10 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     ### LOAD PROPOSAL MASTER FILE FROM NSPIRES
     dfp = pd.read_csv(ps_file)
 
-    ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER 
-    if len (dfp[dfp['Response number'] == pn]) == 0:
+    ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER
+    # colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
+    colnames = ['Proposal Number', 'PI Last Name', 'Linked Org', 'PI Company Name', 'PI City']
+    if len (dfp[dfp[colnames[0]] == pn]) == 0:
         print("\n\tNo matches found in Proposal Master for this proposal number")
         print("\tCheck for differences in proposal number format between PDF filenames and Proposal Master")
         print(f"\tTest: {pn} vs. {dfp['Proposal Number'][0]} --> Update Prop_Nb if needed")
@@ -147,21 +149,21 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         sys.exit()
 
     ### GET PI INFO (iNSPIRES FORMAT)
-    pi_name = (dfp[dfp['Response number'] == pn]['PI Last name'].values[0]).split(',')
-    pi_orgs = (dfp[dfp['Response number'] == pn]['Linked Org'].values[0]).split(', ')
-    pi_orgs.append(dfp[dfp['Response number'] == pn]['Company name'].values[0])
-    pi_city = (dfp[dfp['Response number'] == pn]['City'].values[0]).split(',')[0]
+    pi_name = (dfp[dfp[colnames[0]] == pn][colnames[1]].values[0]).split(',')
+    pi_orgs = (dfp[dfp[colnames[0]] == pn][colnames[2]].values[0]).split(', ')
+    pi_orgs.append(dfp[dfp[colnames[0]] == pn][colnames[3]].values[0])
+    pi_city = (dfp[dfp[colnames[0]] == pn][colnames[4]].values[0]).split(',')[0]
 
     ### GET OTHER TEAM MEMBER NAMES
     for i, val in enumerate(np.arange(14)+1):
         col = f"Member - {val} Member SUID; Name; Role; Email; Organization; Phone"
         if col not in dfp.columns:
             break
-        if pd.isnull(dfp[dfp['Response number'] == pn][col].values[0]):
+        if pd.isnull(dfp[dfp[colnames[0]] == pn][col].values[0]):
             break
         else:
-            tm_name = dfp[dfp['Response number'] == pn][col].values[0].split('; ')[1].split(', ')[0]
-            tm_orgs = dfp[dfp['Response number'] == pn][col].values[0].split('; ')[4].split(', ')[0]
+            tm_name = dfp[dfp[colnames[0]] == pn][col].values[0].split('; ')[1].split(', ')[0]
+            tm_orgs = dfp[dfp[colnames[0]] == pn][col].values[0].split('; ')[4].split(', ')[0]
             pi_name.append(tm_name)
             pi_orgs.append(tm_orgs)
     
@@ -286,14 +288,18 @@ PDF_Path = './Proposals'
 
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
-PDF_Suffix = '_Redacted'
-PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
-if len(PDF_Files) == 0:
-    print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
-    sys.exit()
+### IF USING FULL NSPIRES PROPOSALS, USE SUFFIX = '.pdf'
+PDF_Suffix = '.pdf'
+if PDF_Suffix != '.pdf':
+    PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
+    if len(PDF_Files) == 0:
+        print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
+        sys.exit()
+else:
+    PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
 
 ### GET PROPOSAL MASTER
-PS_File = './ProposalMaster.csv'
+PS_File = './Master.csv'
 if os.path.isfile(PS_File) == False:
     print("\nNo Proposal Master file found in path set by PS_File\nCheck path for Proposal Master\nQuitting program\n")
     sys.exit()  
@@ -307,8 +313,10 @@ DW_All, DWC_All, DWP_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
-    # Prop_Nb = '21-'+pval.split('-')[-2].split('_2')[0]+'-' + (pval.split('-')[-1]).split('_')[0]
+    if PDF_Suffix != '.pdf':
+        Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
+    else:
+        Prop_Nb = '-'.join(pval.split('/')[-1].split('-')[0:-1])  
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
