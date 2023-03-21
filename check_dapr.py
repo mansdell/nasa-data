@@ -198,6 +198,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         if pd.isnull(ival):
             continue
         for n, nval in enumerate(np.arange(stm_pages[0], doc.page_count)):
+
             if (nval >= np.min(ref_pages)) & (nval <= np.max(ref_pages)) & (np.min(ref_pages) > 5):
                 continue
             tp = (get_text(doc, nval)).lower()
@@ -212,7 +213,12 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                         dwc.append(len(wi)) 
                         dww.append(ival)
                         print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
-
+                else:
+                    dwp.append(nval)
+                    dwc.append(len(wi)) 
+                    dww.append(ival)      
+                    print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
+                
     return dww, dwc, dwp, pi_name
     
 
@@ -284,19 +290,18 @@ def get_pages(d, stm_pl=15):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path = './Proposals'
+PDF_Path = './Proposal_PDFs'
 
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
-### IF USING FULL NSPIRES PROPOSALS, USE SUFFIX = '.pdf'
-PDF_Suffix = '_anonproposal'
+PDF_Suffix = '_Redacted'
 PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
 if len(PDF_Files) == 0:
     print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
     sys.exit()
 
 ### GET PROPOSAL MASTER
-PS_File = './Master.csv'
+PS_File = 'ProposalMaster.csv'
 if os.path.isfile(PS_File) == False:
     print("\nNo Proposal Master file found in path set by PS_File\nCheck path for Proposal Master\nQuitting program\n")
     sys.exit()  
@@ -309,8 +314,9 @@ DW_All, DWC_All, DWP_All = [], [], []
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
-    ### GET PROPOSAL FILE NAME
-    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
+    ### GET PROPOSAL FILE NAME (use second option if PI last name included in PDF names)
+    # Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
+    Prop_Nb = '_'.join(pval.split('/')[-1].split(PDF_Suffix)[0].split('_')[0:-1])
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
