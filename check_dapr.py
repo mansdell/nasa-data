@@ -138,13 +138,15 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     ### LOAD PROPOSAL MASTER FILE FROM NSPIRES
     dfp = pd.read_csv(ps_file)
 
+    ### FIGURE OUT WHICH COLUMN NAMES TO USE (DIFFERENT BETWEEN DIVISIONS)
+    colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
+    if colnames[0] not in  np.array(dfp.columns):
+        colnames = ['Proposal Number', 'PI Last Name', 'Linked Org', 'PI Company Name', 'PI City']
     ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER
-    # colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
-    colnames = ['Proposal Number', 'PI Last Name', 'Linked Org', 'PI Company Name', 'PI City']
     if len (dfp[dfp[colnames[0]] == pn]) == 0:
         print("\n\tNo matches found in Proposal Master for this proposal number")
         print("\tCheck for differences in proposal number format between PDF filenames and Proposal Master")
-        print(f"\tTest: {pn} vs. {dfp['Proposal Number'][0]} --> Update Prop_Nb if needed")
+        print(f"\tTest: {pn} vs. {dfp[colnames[0]][0]} --> Update Prop_Nb if needed")
         print("\tQuitting program\n")
         sys.exit()
 
@@ -156,14 +158,26 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
     ### GET OTHER TEAM MEMBER NAMES
     for i, val in enumerate(np.arange(14)+1):
-        col = f"Member - {val} Member SUID; Name; Role; Email; Organization; Phone"
+
+        ### MATCH THE TEAM MEMBER COLUMN NAME (HAS CHANGED BETWEEN YEARS AND/OR DIVISIONS)
+        if 'Member - 1 Member name; Role; Email; Relationship_org; Phone' in dfp.columns:
+            col = f'Member - {val} Member name; Role; Email; Relationship_org; Phone'
+            idx = [0, 0, 3]
+        elif 'Member - 1 Member SUID; Name; Role; Email; Organization; Phone':
+            col = f"Member - {val} Member SUID; Name; Role; Email; Organization; Phone"
+            idx = [0, 1, 4]
+        else:
+            print("Team member column name not found")
+            sys.exit()
+
+        ### GRAB INFO
         if col not in dfp.columns:
             break
         if pd.isnull(dfp[dfp[colnames[0]] == pn][col].values[0]):
             break
         else:
-            tm_name = dfp[dfp[colnames[0]] == pn][col].values[0].split('; ')[1].split(', ')[0]
-            tm_orgs = dfp[dfp[colnames[0]] == pn][col].values[0].split('; ')[4].split(', ')[0]
+            tm_name = dfp[dfp[colnames[0]] == pn][col].values[idx[0]].split('; ')[idx[1]].split(', ')[0]
+            tm_orgs = dfp[dfp[colnames[0]] == pn][col].values[idx[0]].split('; ')[idx[2]].split(', ')[0]
             pi_name.append(tm_name)
             pi_orgs.append(tm_orgs)
     
@@ -290,7 +304,7 @@ def get_pages(d, stm_pl=15):
 # ====================== Main Code ========================
 
 ### SET PATH TO PDFs
-PDF_Path = './Proposal_PDFs'
+PDF_Path = '/Users/mansdell/Library/CloudStorage/Box-Box/_Ansdell/PSD/Proposals/LDAP/LDAP22/pdfs-LDAP22_2-Redacted'
 
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
@@ -301,7 +315,7 @@ if len(PDF_Files) == 0:
     sys.exit()
 
 ### GET PROPOSAL MASTER
-PS_File = 'ProposalMaster.csv'
+PS_File = '/Users/mansdell/Library/CloudStorage/Box-Box/_Ansdell/PSD/Proposal Masters/ROSES-22/LDAP_2022_Master.csv'
 if os.path.isfile(PS_File) == False:
     print("\nNo Proposal Master file found in path set by PS_File\nCheck path for Proposal Master\nQuitting program\n")
     sys.exit()  
@@ -315,8 +329,9 @@ DW_All, DWC_All, DWP_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME (use second option if PI last name included in PDF names)
-    # Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
-    Prop_Nb = '_'.join(pval.split('/')[-1].split(PDF_Suffix)[0].split('_')[0:-1])
+    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
+    if len(Prop_Nb.split('_')) > 2:
+        Prop_Nb = '_'.join(pval.split('/')[-1].split(PDF_Suffix)[0].split('_')[0:-1])
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
