@@ -382,6 +382,7 @@ def check_compliance(doc, ps, pe):
     ### GRAB FONT SIZE & CPI PER LINE
     for i, val in enumerate(np.arange(ps, pe + 1)):
         t = get_text(doc, val)
+        t = t.replace('  ', ' ') ## ONCE A PROPOSAL'S SPACES BECAME 2 SPACES, RESULTING IN FALSE POSITVE CPI FLAGS
         ln = t.split('\n')
         ln = [x for x in ln if len(x) > 50] ## TRY TO ONLY KEEP REAL LINES
         if i ==0:
@@ -555,7 +556,7 @@ def check_DMP(doc, ps, pe):
 # ====================== Main Code ========================
 
 ### SET IN/OUT PATHS
-PDF_Path  = 'proposals
+PDF_Path  = './Proposals'
 Out_Path  = '~/Desktop' 
 
 ### SET OTHER FLAGS
