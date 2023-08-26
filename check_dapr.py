@@ -10,6 +10,7 @@ Script to check DAPR compliance in NSPIRES proposals
 import sys, os, glob, re, pdb
 import numpy as np
 import pandas as pd
+import argparse
 
 import textwrap
 from termcolor import colored
@@ -142,6 +143,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
     colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
     if colnames[0] not in  np.array(dfp.columns):
         colnames = ['Proposal Number', 'PI Last Name', 'Linked Org', 'PI Company Name', 'PI City']
+        
     ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER
     if len (dfp[dfp[colnames[0]] == pn]) == 0:
         print("\n\tNo matches found in Proposal Master for this proposal number")
@@ -217,22 +219,29 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                 continue
             tp = (get_text(doc, nval)).lower()
             wi = [[i.start(), i.end()] for i in re.finditer(r'\b' + re.escape(ival.lower()) + r'\b', tp)]
+
             for m, mval in enumerate(wi):
 
                 ### CHECK IF GENDER PRONOUN CATCHES ARE ACTUALLY HE/SHE, HIM/HER, ETC.
                 ### ONLY SAVE DW INFO IF NOT
                 if ival in dw_gp:
                     if not (tp[mval[0]-1] == '/') | (tp[mval[1]] == '/'):
+
+                        ### ONLY SAVE FLAGS FOR FIRST OCCURENCE ON PAGE
+                        if m == 0:
+                            dwp.append(nval)
+                            dwc.append(len(wi)) 
+                            dww.append(ival)
+                            print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
+                else:
+
+                    ### ONLY SAVE FLAGS FOR FIRST OCCURENCE ON PAGE
+                    if m == 0:
                         dwp.append(nval)
                         dwc.append(len(wi)) 
-                        dww.append(ival)
+                        dww.append(ival)      
                         print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
-                else:
-                    dwp.append(nval)
-                    dwc.append(len(wi)) 
-                    dww.append(ival)      
-                    print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
-                
+                    
     return dww, dwc, dwp, pi_name
     
 
@@ -303,20 +312,23 @@ def get_pages(d, stm_pl=15):
 
 # ====================== Main Code ========================
 
-### SET PATH TO PDFs
-PDF_Path = '/Users/mansdell/Library/CloudStorage/Box-Box/_Ansdell/PSD/Proposals/LDAP/LDAP22/pdfs-LDAP22_2-Redacted'
+### GET ARGUMENTS
+### NOTE PDF_SUFFIX USES "REMAINDER" SO IT CAN HANDLE STRINGS STARTING WITH "-"
+parser = argparse.ArgumentParser()
+parser.add_argument("PDF_Path", type=str, help="path to anonymized proposal PDF")
+parser.add_argument("PDF_Suffix", type=str, help="suffix of anonymized proposal PDF (what is before .pdf but after proposal number)", nargs=argparse.REMAINDER)
+parser.add_argument("PM_Path", type=str, help="path to team info (NSPIRES cover pages or .csv file)")
+args = parser.parse_args()
 
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
-PDF_Suffix = '_Redacted'
-PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*' + PDF_Suffix + '.pdf')))
+PDF_Files = np.sort(glob.glob(os.path.join(args.PDF_Path, '*' + args.PDF_Suffix[0] + '.pdf')))
 if len(PDF_Files) == 0:
     print("\nNo files found in folder set by PDF_Path\nCheck directory path in PDF_Path and PDF suffix in PDF_Files\nQuitting program\n")
     sys.exit()
 
 ### GET PROPOSAL MASTER
-PS_File = '/Users/mansdell/Library/CloudStorage/Box-Box/_Ansdell/PSD/Proposal Masters/ROSES-22/LDAP_2022_Master.csv'
-if os.path.isfile(PS_File) == False:
+if os.path.isfile(args.PM_Path) == False:
     print("\nNo Proposal Master file found in path set by PS_File\nCheck path for Proposal Master\nQuitting program\n")
     sys.exit()  
 
@@ -328,10 +340,8 @@ DW_All, DWC_All, DWP_All = [], [], []
 ### LOOP THROUGH ALL PROPOSALS
 for p, pval in enumerate(PDF_Files):
 
-    ### GET PROPOSAL FILE NAME (use second option if PI last name included in PDF names)
-    Prop_Nb = pval.split('/')[-1].split(PDF_Suffix)[0]
-    if len(Prop_Nb.split('_')) > 2:
-        Prop_Nb = '_'.join(pval.split('/')[-1].split(PDF_Suffix)[0].split('_')[0:-1])
+    ### GET PROPOSAL FILE NAME
+    Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
@@ -343,9 +353,9 @@ for p, pval in enumerate(PDF_Files):
         continue
 
     ### FIX ANY PROPOSALS THAT COULDN'T FIND REFERENCE SECTION (PAGE NUMBERS ARE FROM PDF, NOT PYTHON ZERO BASE)
-    Prop_Nb_Fix, Ref_Pages_Fix = ['22-HW22_2-0005', '22-HW22_2-0048'], [[41, 47], [40,40]]
+    Prop_Nb_Fix, Ref_Pages_Fix = ['23-HSR23_2-0002', '23-HSR23_2-0184'], [[35,39], [33,33]]
     if Prop_Nb in Prop_Nb_Fix:
-        print(colored(f"\t\tRef_Fixed = {Ref_Pages[0], Ref_Pages[1]}", 'yellow'))
+        print(colored(f"\t\tRef_Fixed = {Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0], Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]}", 'yellow'))
         Ref_Pages = [Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0]-1, Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]-1]
 
     ### CHECK FONT SIZE COMPLIANCE 
@@ -355,7 +365,7 @@ for p, pval in enumerate(PDF_Files):
     N_Brac, N_EtAl, N_Para = check_ref_type(Doc, STM_Pages[0], STM_Pages[1])
 
     ### CHECK DAPR WORDS (AND GRAB TEAM MEMBER NAMES)
-    DW, DWC, DWP, TMN = check_dapr_words(Doc, PS_File, Prop_Nb, STM_Pages, Ref_Pages)
+    DW, DWC, DWP, TMN = check_dapr_words(Doc, args.PM_Path, Prop_Nb, STM_Pages, Ref_Pages)
 
     ### RECORD STUFF
     Prop_Nb_All.append(Prop_Nb)
