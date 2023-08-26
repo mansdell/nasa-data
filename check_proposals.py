@@ -10,6 +10,7 @@ Script to read and analyze data in NSPIRES-formatted PDF
 import sys, os, glob, pdb
 import numpy as np
 import pandas as pd
+import argparse
 
 import textwrap
 from termcolor import colored
@@ -398,7 +399,7 @@ def check_compliance(doc, ps, pe):
 
     ### RETURN IF COULDN'T READ
     if len(df) == 0:
-        return 0
+        return 0, 0, 0, 0, 0
 
     ### MEDIAN FONT SIZE (PRINT WARNING IF LESS THAN 12 PT)
     ### only use text > 50 characters (excludes random smaller text; see histograms for all)
@@ -437,12 +438,12 @@ def check_compliance(doc, ps, pe):
     # mpl.rc('lines', markersize=5)
     # fig = plt.figure(figsize=(6, 4))
     # ax = fig.add_subplot(111)
-    # ax.set_title(Prop_Name + "   Median Font = " + str(MFS) + "pt    CPI = " + str(round(np.median(cpi[cpi > 8]), 1)), size=11)
+    # ax.set_title(pval.split('/')[-1] + "   Median Font = " + str(mfs) + "pt    CPI = " + str(round(np.median(cpi[cpi > 8]), 1)), size=11)
     # ax.set_xlabel('Font Size', size=10)
     # ax.set_ylabel('Density', size=10)
     # ax.axvspan(11.8, 12.2, alpha=0.5, color='gray')
     # ax.hist(df["Size"], bins=np.arange(5.4, 18, 0.4), density=True)
-    # fig.savefig(os.path.join(out_path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
+    # fig.savefig(os.path.join(Out_Path, 'fc_' + pval.split('/')[-1]), bbox_inches='tight', dpi=100, alpha=True, rasterized=True)
     # plt.close('all')
 
     return mfs, cpi, lns, lpi, pgs
@@ -554,16 +555,17 @@ def check_DMP(doc, ps, pe):
 
 
 # ====================== Main Code ========================
-
-### SET IN/OUT PATHS
-PDF_Path  = './Proposals'
-Out_Path  = '~/Desktop' 
+ 
+### GET ARGUMENTS
+parser = argparse.ArgumentParser()
+parser.add_argument("PDF_Path", type=str, help="path to anonymized proposal PDF")
+args = parser.parse_args()
 
 ### SET OTHER FLAGS
 Check_DMP = False
 
 ### GET LIST OF PDF FILES
-PDF_Files = np.sort(glob.glob(os.path.join(PDF_Path, '*.pdf')))
+PDF_Files = np.sort(glob.glob(os.path.join(args.PDF_Path, '*.pdf')))
 
 ### ARRAYS TO FILL
 Prop_Nb_All, PI_First_All, PI_Last_All, Budget_All = [], [], [], []
@@ -595,6 +597,9 @@ for p, pval in enumerate(PDF_Files):
 
     ### CHECK FONT/TEXT COMPLIANCE
     Font_Size, CPI, CPI_Lines, LPI, LPI_Pages = check_compliance(Doc, Page_Start, Page_End)
+    if Font_Size == 0:
+        print("\n\tCould not read PDF, did not save")
+        continue
 
     ### GUESS PHD YEAR FROM CV
     PhD_Info, PhD_Page = get_phd_data(Doc, Page_End, PI_Last)
@@ -651,4 +656,4 @@ d = {'Prop_Nb': Prop_Nb_All, 'PI_Last': PI_Last_All, 'PI_First': PI_First_All,
      'PhD_Year': PhD_Year_All, 'PhD_Page': PhD_Page_All, 'Gender': Gender_All, 'Zipcode': Zipcode_All, 
      'Org_Name': Org_All, 'Org_Type': Org_Type_All, 'CoI_Gender': CoI_Gender_All, 'Budget_Total_Years': Budget_All}
 df = pd.DataFrame(data=d)
-df.to_csv(os.path.join(Out_Path, 'outputs.csv'), index=False)
+df.to_csv(os.path.join(os.path.expanduser("~/Desktop"), 'format_checks.csv'), index=False)
