@@ -218,17 +218,37 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         
     ### GET PAGE NUMBERS WHERE DAPR WORDS APPEAR
     ### IGNORES REFERENCE SECTION, IF KNOWN
-    dwp, dwc, dww = [], [], []
+    dwp, dwc, dww, pjsf = [], [], [], -99
     for i, ival in enumerate(dw):
+
+        ### SKIP IF EMPTY
         if pd.isnull(ival):
             continue
-        for n, nval in enumerate(np.arange(stm_pages[0], doc.page_count)):
 
+        ### ADD COVER PAGE TO SEARCH TO INCLUDE PROJECT SUMMARY
+        pg_arr = np.sort(np.append(np.arange(stm_pages[0], doc.page_count), np.arange(0, 5)))
+
+        ### LOOP THROUGH PAGES
+        for n, nval in enumerate(pg_arr):
+
+            ### SKIP REFERENCES
             if (nval >= np.min(ref_pages)) & (nval <= np.max(ref_pages)) & (np.min(ref_pages) > 5):
                 continue
+
+            ### SKIP IF FRONT-MATTER BUT NOT PROJECT SUMMARY
+            ### SAVE PAGE OF PROJECT SUMMARY IF FOUND
+            if (nval < 4) and ("SECTION VII - Project Summary" not in get_text(doc, nval)):
+                continue
+            if (nval < 4) and ("SECTION VII - Project Summary" in get_text(doc, nval)):
+                pjs, pjsf = 'NSPIRES Project Summary on page', nval
+            else:
+                pjs = ''
+
+            ### READ IN TEXT AND INDEX DAPR WORD
             tp = (get_text(doc, nval)).lower()
             wi = [[i.start(), i.end()] for i in re.finditer(r'\b' + re.escape(ival.lower()) + r'\b', tp)]
 
+            ### ITERATE THROUGH INDEXES
             for m, mval in enumerate(wi):
 
                 ### CHECK IF GENDER PRONOUN CATCHES ARE ACTUALLY HE/SHE, HIM/HER, ETC.
@@ -241,7 +261,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                             dwp.append(nval)
                             dwc.append(len(wi)) 
                             dww.append(ival)
-                            print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
+                            print(f'\t"{ival}" found {len(wi)} times {pjs} {nval+1}')
                 else:
 
                     ### ONLY SAVE FLAGS FOR FIRST OCCURENCE ON PAGE
@@ -249,8 +269,12 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                         dwp.append(nval)
                         dwc.append(len(wi)) 
                         dww.append(ival)      
-                        print(f'\t"{ival}" found {len(wi)} times on pages {nval+1}')
-                    
+                        print(f'\t"{ival}" found {len(wi)} times {pjs} {nval+1}')
+
+    ### PRINT WARNING IF COULD NOT FIND PROJECT SUMMARY
+    if pjsf == -99:
+        print(colored("\n\tCould not locate Project Summary", 'red'))
+
     return dww, dwc, dwp, pi_name
     
 
