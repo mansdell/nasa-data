@@ -142,7 +142,11 @@ def check_ref_type(doc, ps, pe):
 def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
 
     ### LOAD PROPOSAL MASTER FILE FROM NSPIRES
-    dfp = pd.read_csv(ps_file)
+    ### TRY-EXCEPT IS TO HANDLE BOTH CSV AND EXCEL FILES
+    try:
+        dfp = pd.read_csv(ps_file)
+    except:
+        dfp = pd.read_excel(ps_file)
 
     ### FIGURE OUT WHICH COLUMN NAMES TO USE (DIFFERENT BETWEEN DIVISIONS)
     colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
@@ -322,7 +326,7 @@ def get_pages(d, stm_pl=15):
 parser = argparse.ArgumentParser()
 parser.add_argument("PDF_Path", type=str, help="path to anonymized proposal PDF")
 parser.add_argument("PDF_Suffix", type=str, help="suffix of anonymized proposal PDF (what is before .pdf but after proposal number)", nargs=argparse.REMAINDER)
-parser.add_argument("PM_Path", type=str, help="path to team info (NSPIRES cover pages or .csv file)")
+parser.add_argument("PM_Path", type=str, help="path to Proposal Master report as Excel or .csv file)")
 args = parser.parse_args()
 
 ### GET LIST OF PDF FILES
