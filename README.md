@@ -8,8 +8,10 @@ Code author: Megan Ansdell [@mansdell](https://github.com/mansdell)
 
 ### Required Non-standard Packages
 
-[PyMuPDF](https://pymupdf.readthedocs.io/en/latest/): a useful package for importing PDF text (which confusingly is imported as "import fitz")
-
+[PyMuPDF](https://pymupdf.readthedocs.io/en/latest/): a useful package for importing PDF text (which confusingly is imported as "import fitz"). To install, use: 
+```
+pip install PyMuPDF==1.21.1
+```
 [gender-guesser](https://pypi.org/project/gender-guesser/): only needed for one part of for check_proposals.py
 
 # Description
