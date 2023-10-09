@@ -66,7 +66,7 @@ def get_pages(d, pl=15):
     """
 
     ### GET TOTAL NUMBER OF PAGES IN PDF
-    pn = d.pageCount
+    pn = d.page_count
 
     ### WORDS THAT INDICATE EXTRA STUFF BEFORE PROPOSAL STARTS
     check_words = ["contents", "c o n t e n t s", "budget", "cost", "costs",
@@ -97,6 +97,10 @@ def get_pages(d, pl=15):
 
             ### SET END PAGE ASSUMING AUTHORS USED FULL PAGE LIMIT
             pe  = ps + (pl - 1) 
+
+            ### FIX IF END PAGE GREATER THAN PAGE LIMIT (HAPPENS IF PROPOSAL MUCH SHORTER THAN PAGE LIMIT)
+            if pe > pn:
+                pe = pn - 1
                         
         ### EXIT LOOP IF START PAGE FOUND
         if ps != 0:
@@ -108,24 +112,25 @@ def get_pages(d, pl=15):
         pe += 1
 
     ### CHECK THAT PAGE AFTER END PAGE IS REFERENCES
-    Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
-    if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
+    if pe < pn - 1:
+        Ref_Words = ['references', 'bibliography', "r e f e r e n c e s", "b i b l i o g r a p h y"]
+        if not any([x in get_text(d, pe + 1).lower() for x in Ref_Words]):
 
-        ### IF NOT, TRY NEXT PAGE (OR TWO) AND UPDATED LAST PAGE NUMBER
-        if any([x in get_text(d, pe + 2).lower() for x in Ref_Words]):
-            pe += 1
-        elif any([x in get_text(d, pe + 3).lower() for x in Ref_Words]):
-            pe += 2
+            ### IF NOT, TRY NEXT PAGE (OR TWO) AND UPDATED LAST PAGE NUMBER
+            if any([x in get_text(d, pe + 2).lower() for x in Ref_Words]):
+                pe += 1
+            elif any([x in get_text(d, pe + 3).lower() for x in Ref_Words]):
+                pe += 2
 
-        ### CHECK THEY DIDN'T GO UNDER THE PAGE LIMIT
-        if any([x in get_text(d, pe).lower() for x in Ref_Words]):
-            pe -= 1
-        elif any([x in get_text(d, pe - 1).lower() for x in Ref_Words]):
-            pe -= 2
-        elif any([x in get_text(d, pe - 2).lower() for x in Ref_Words]):
-            pe -= 3
-        elif any([x in get_text(d, pe - 3).lower() for x in Ref_Words]):
-            pe -= 4
+            ### CHECK THEY DIDN'T GO UNDER THE PAGE LIMIT
+            if any([x in get_text(d, pe).lower() for x in Ref_Words]):
+                pe -= 1
+            elif any([x in get_text(d, pe - 1).lower() for x in Ref_Words]):
+                pe -= 2
+            elif any([x in get_text(d, pe - 2).lower() for x in Ref_Words]):
+                pe -= 3
+            elif any([x in get_text(d, pe - 3).lower() for x in Ref_Words]):
+                pe -= 4
 
     ### PRINT TO SCREEN (ACCOUNTING FOR ZERO-INDEXING)
     print("\n\tTotal pages = {},  Start page = {},   End page = {}".format(pn, ps + 1, pe + 1))
@@ -195,7 +200,7 @@ def get_phd_data(doc, ps, pi):
     phd_words = ["phd", "ph.d", "d.phil", "philosophy", "dr.rer.nat."]
 
     ### LOOP THROUGH PDF PAGES
-    pn = doc.pageCount
+    pn = doc.page_count
     for i, val in enumerate(np.arange(ps+1, pn)):
 
         ### EXTRACT/FIX TEXT
@@ -391,7 +396,7 @@ def check_compliance(doc, ps, pe):
             cpi = [round(len(x)/6.5,2) for x in ln[2:-2]]  ### TRY TO AVOID HEADERS/FOOTERS
             lns, lpi = ln[2:-2], [round(len(ln)/9, 2)]
         else:
-            df = df.append(get_fonts(doc, val), ignore_index=True)
+            df = pd.concat([df, get_fonts(doc, val)], ignore_index=True)
             cpi = cpi + [round(len(x)/6.5,2) for x in ln[2:-2]]
             lns = lns + ln[2:-2]
             lpi.append(round(len(ln)/9, 2))

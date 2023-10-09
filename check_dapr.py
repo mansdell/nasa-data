@@ -76,7 +76,7 @@ def get_median_font(doc, ps, pe):
         if i ==0:
             df = get_fonts(doc, val)
         else:
-            df = df.append(get_fonts(doc, val), ignore_index=True)
+            df = pd.concat([df, get_fonts(doc, val)], ignore_index=True)
     cpi = np.array(cpi)
 
     if len(df) == 0:
