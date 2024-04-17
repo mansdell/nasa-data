@@ -52,13 +52,13 @@ def get_text(d, pn):
     return t
 
 
-def get_pages(d, pl=15):
+def get_pages(d, pl):
 
     """
     PURPOSE:   find start and end pages of proposal within NSPIRES-formatted PDF
                [assumes proposal starts after budget, and references at end of proposal]
     INPUTS:    d  = fitz Document object
-               pl = page limit of proposal (int; default = 15)
+               pl = page limit of proposal (int; default input arg = 15)
     OUTPUTS:   pn = number of pages of proposal (int)
                ps = start page number (int)
                pe = end page number (int)
@@ -521,8 +521,11 @@ def get_demographics(doc, pi_first):
         if ('Question 2 : Type of institution' in text):
             org_type = (((text[text.index('Question 2'):text.index('Question 3')]).split('\n')[-2]).split(':')[-1]).strip()
             break
-    if org_type == '':
-        org_type = 'Not Specified'
+        elif ('Question 8 : Type of institution' in text):
+            org_type = (((text[text.index('Question 8'):text.index('Question 9')]).split('\n')[-2]).split(':')[-1]).strip()
+            break
+        else:
+            org_type = 'Not Specified'
 
     return gndr, org_name, org_type, zip_code, coi, [bt, b1, b2, b3, b4], spi
 
@@ -560,10 +563,15 @@ def check_DMP(doc, ps, pe):
 
 
 # ====================== Main Code ========================
- 
+
+### EXAMPLE COMMAND LINE INPUTS
+### FOR STANDARD 15-PAGE PROPOSALS: python check_proposals.py "/PATH/TO/PDFS" 
+### FOR 6-PAGE FINESST PROPOSALS: python check_proposals.py "/PATH/TO/PDFS" --Page_Limit 6
+
 ### GET ARGUMENTS
 parser = argparse.ArgumentParser()
 parser.add_argument("PDF_Path", type=str, help="path to anonymized proposal PDF")
+parser.add_argument("--Page_Limit", type=int, default=15, help="page limit for STM section")
 args = parser.parse_args()
 
 ### SET OTHER FLAGS
@@ -590,7 +598,7 @@ for p, pval in enumerate(PDF_Files):
 
     ### GET PAGES OF S/T/M PROPOSAL
     try:
-        Page_Num, Page_Start, Page_End = get_pages(Doc)         
+        Page_Num, Page_Start, Page_End = get_pages(Doc, args.Page_Limit)         
     except RuntimeError:
         print("\tCould not read PDF, did not save")
         continue
