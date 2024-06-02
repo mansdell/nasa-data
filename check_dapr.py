@@ -149,10 +149,22 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
         dfp = pd.read_excel(ps_file)
 
     ### FIGURE OUT WHICH COLUMN NAMES TO USE (DIFFERENT BETWEEN DIVISIONS)
-    colnames = ['Response number', 'PI Last name', 'Linked Org', 'Company name', 'City']
-    if colnames[0] not in  np.array(dfp.columns):
-        colnames = ['Proposal Number', 'PI Last Name', 'Linked Org', 'PI Company Name', 'PI City']
-        
+    colnames_pm = np.array([x.lower() for x in dfp.columns])
+    colnames = np.array(['response number', 'pi last name', 'linked org', 'pi company name', 'pi city'])
+    for i, val in enumerate(colnames):
+        if val in colnames_pm:
+            colnames[i] = dfp.columns.values[ np.where(colnames_pm == val)][0]
+        elif (val not in colnames_pm) & (val == 'response number') & ('proposal number' in colnames_pm):
+            colnames[i] = dfp.columns.values[np.where(colnames_pm == 'proposal number')][0]
+        elif  (val not in colnames_pm) & ('pi' in val) & (val.replace('pi', '').strip() in colnames_pm):
+            colnames[i] = dfp.columns.values[np.where(colnames_pm == val.replace('pi', '').strip())][0]
+        else:
+            pdb.set_trace()
+            print(f"\n\tUnknown column name in Proposal Master: {val}")
+            print(f"\tProposal Master column: {dfp.columns.values[0:10]}")
+            print("\tQuitting program\n")
+            sys.exit()
+
     ### CHECK IF MISMATCH BETWEEN PROPOSAL NUMBER PARSED FROM PDF FILE AND WHAT IS USED IN PROPOSAL MASTER
     if len (dfp[dfp[colnames[0]] == pn]) == 0:
         print("\n\tNo matches found in Proposal Master for this proposal number")
@@ -286,14 +298,14 @@ def get_pages(d, stm_pl=15):
     ### LOOP THROUGH PDF PAGES
     stm_start, stm_end, ref_start, ref_end, ref_end_bu = 0, -100, -100, -100, -100
     tcr, tcs, pflag = 'white', 'white', ''
-    for i, val in enumerate(np.arange(5, pn-1)):
-            
+    for i, val in enumerate(np.arange(5, pn - 1)):
+
         ### READ IN TEXT FROM THIS PAGE AND NEXT PAGE
         t1 = get_text(d, val).replace('\n', '').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ')[0:500]
         t2 = get_text(d, val + 1).replace('\n', '').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ')[0:500]
         t1 = t1.lower()
         t2 = t2.lower()
-
+              
         ### FIND START OF STM IF FULL NSPIRES PROPOSAL
         if ('section x - budget' in t1) & ('section x - budget' not in t2):
             stm_start = val + 1
@@ -305,13 +317,14 @@ def get_pages(d, stm_pl=15):
             ref_start = val + 1
 
         ### FIND REF END 
-        # w1, w2, w3, w4, w5, w6, w7 = 'data management', 'budget justification', 'work plan', 'budget narrative', 'work effort', 'total budget'
-        # if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)):
-        w1, w2, w3, w4, w5, w6 = 'budget justification', 'budget narrative', 'total budget', 'table of work effort', 'data management', 'table of personnel'
-        if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)):
+        w1, w2, w3, w4, w5, w6, w7, w8, w9 = 'redacted', 'summary of work effort', 'budget', 'budget narrative', 'total budget', 'table of work effort', 'data management', 'table of personnel', 'inclusion plan'
+        if (ref_start != -100) & ((w1 in t2) & (w1 not in t1)) | ((w2 in t2) & (w2 not in t1)) | ((w3 in t2) & (w3 not in t1)) | ((w4 in t2) & (w4 not in t1)) | ((w5 in t2) & (w5 not in t1)) | ((w6 in t2) & (w6 not in t1)) | ((w7 in t2) & (w7 not in t1)) | ((w8 in t2) & (w8 not in t1)) | ((w9 in t2) & (w9 not in t1)):
             ref_end = val
             if (ref_start != -100) & (ref_end > ref_start) & (stm_end - stm_start > stm_pl-5):
                 break
+        ### FOR WHEN REFERENCES ARE AT VERY END OF DOC
+        if (val == pn - 2) & (ref_start != -100) & ((ref_end == -100) | (ref_end < ref_start)):
+            ref_end = val + 1
 
     ### FIX SOME THINGS BASED ON COMMON SENSE
     if ref_end < ref_start:
@@ -375,6 +388,10 @@ for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
     Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0]
+    if '_' in Prop_Nb:
+        Prop_Nb = pval.split('/')[-1].split('_')[0]
+    elif "-DAPR" in Prop_Nb:
+        Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0].split('-DAPR')[0]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
@@ -386,7 +403,7 @@ for p, pval in enumerate(PDF_Files):
         continue
 
     ### FIX ANY PROPOSALS THAT COULDN'T FIND REFERENCE SECTION (PAGE NUMBERS ARE FROM PDF, NOT PYTHON ZERO BASE)
-    Prop_Nb_Fix, Ref_Pages_Fix = ['23-HSR23_2-0002', '23-HSR23_2-0184'], [[35,39], [33,33]]
+    Prop_Nb_Fix, Ref_Pages_Fix = ['23-EEJ23-0013','23-EEJ23-0027','23-EEJ23-0038','23-EEJ23-0041','23-EEJ23-0045','23-EEJ23-0046','23-EEJ23-0051'], [[2,2],[37,39],[38,42],[2,2],[37,39],[39,44],[33,33]]
     if Prop_Nb in Prop_Nb_Fix:
         print(colored(f"\t\tRef_Fixed = {Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0], Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]}", 'yellow'))
         Ref_Pages = [Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0]-1, Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]-1]
