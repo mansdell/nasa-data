@@ -388,7 +388,7 @@ for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
     Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0]
-    if '_' in Prop_Nb:
+    if ('_' in Prop_Nb) and ('_2' not in Prop_Nb):
         Prop_Nb = pval.split('/')[-1].split('_')[0]
     elif "-DAPR" in Prop_Nb:
         Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0].split('-DAPR')[0]
@@ -403,7 +403,7 @@ for p, pval in enumerate(PDF_Files):
         continue
 
     ### FIX ANY PROPOSALS THAT COULDN'T FIND REFERENCE SECTION (PAGE NUMBERS ARE FROM PDF, NOT PYTHON ZERO BASE)
-    Prop_Nb_Fix, Ref_Pages_Fix = ['23-EEJ23-0013','23-EEJ23-0027','23-EEJ23-0038','23-EEJ23-0041','23-EEJ23-0045','23-EEJ23-0046','23-EEJ23-0051'], [[2,2],[37,39],[38,42],[2,2],[37,39],[39,44],[33,33]]
+    Prop_Nb_Fix, Ref_Pages_Fix = ['24-XRP24_2-0039','24-XRP24_2-0090','24-XRP24_2-0134'], [[37,38],[3,3],[36,37]]
     if Prop_Nb in Prop_Nb_Fix:
         print(colored(f"\t\tRef_Fixed = {Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0], Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]}", 'yellow'))
         Ref_Pages = [Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0]-1, Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]-1]
