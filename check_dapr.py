@@ -2,6 +2,9 @@
 
 Script to check DAPR compliance in NSPIRES proposals
 
+python check_dapr.py "/Users/mansdell/Proposals/" "_Redacted" "/Users/mansdell/ProposalMasters/ProposalMaster.csv"
+
+
 """
 
 
@@ -14,6 +17,9 @@ import argparse
 
 import textwrap
 from termcolor import colored
+import colorama
+colorama.init()
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -23,6 +29,8 @@ from collections import Counter
 import datetime
 import unicodedata
 import gender_guesser.detector as gender
+
+os.system('color')
 
 
 # ============== Define Functions ===============
@@ -273,7 +281,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                             dwp.append(nval)
                             dwc.append(len(wi)) 
                             dww.append(ival)
-                            print(f'\t"{ival}" found {len(wi)} times {pjs} {nval+1}')
+                            print(f'\t"{ival}" found {len(wi)} times {pjs} on page {nval+1}')
                 else:
 
                     ### ONLY SAVE FLAGS FOR FIRST OCCURENCE ON PAGE
@@ -281,7 +289,7 @@ def check_dapr_words(doc, ps_file, pn, stm_pages, ref_pages):
                         dwp.append(nval)
                         dwc.append(len(wi)) 
                         dww.append(ival)      
-                        print(f'\t"{ival}" found {len(wi)} times {pjs} {nval+1}')
+                        print(f'\t"{ival}" found {len(wi)} times {pjs} on page {nval+1}')
 
     ### PRINT WARNING IF COULD NOT FIND PROJECT SUMMARY
     if pjsf == -99:
@@ -365,6 +373,7 @@ parser.add_argument("PDF_Path", type=str, help="path to anonymized proposal PDF"
 parser.add_argument("PDF_Suffix", type=str, help="suffix of anonymized proposal PDF (what is before .pdf but after proposal number)", nargs=argparse.REMAINDER)
 parser.add_argument("PM_Path", type=str, help="path to Proposal Master report as Excel or .csv file)")
 args = parser.parse_args()
+STM_PL = 15
 
 ### GET LIST OF PDF FILES
 ### CHANGE IF NRESS USED DIFFERENT SUFFIX
@@ -387,23 +396,23 @@ DW_All, DWC_All, DWP_All = [], [], []
 for p, pval in enumerate(PDF_Files):
 
     ### GET PROPOSAL FILE NAME
-    Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0]
+    Prop_Nb = os.path.split(pval)[-1].split(args.PDF_Suffix[0])[0]
     if ('_' in Prop_Nb) and ('_2' not in Prop_Nb):
-        Prop_Nb = pval.split('/')[-1].split('_')[0]
+        Prop_Nb = os.path.split(pval)[-1].split('_')[0]
     elif "-DAPR" in Prop_Nb:
-        Prop_Nb = pval.split('/')[-1].split(args.PDF_Suffix[0])[0].split('-DAPR')[0]
+        Prop_Nb = os.path.split(pval)[-1].split(args.PDF_Suffix[0])[0].split('-DAPR')[0]
     print(colored(f'\n\n\n\t{Prop_Nb}', 'green', attrs=['bold']))
 
     ### GET PAGES OF PROPOSAL
     pval = str(pval)
     Doc = fitz.open(pval)
-    STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc)        
+    STM_Pages, Ref_Pages, Tot_Pages, pFlag = get_pages(Doc, stm_pl=STM_PL)        
     if Tot_Pages == 0:
         print(f'\n\tProposal incomplete, skipping')
         continue
 
     ### FIX ANY PROPOSALS THAT COULDN'T FIND REFERENCE SECTION (PAGE NUMBERS ARE FROM PDF, NOT PYTHON ZERO BASE)
-    Prop_Nb_Fix, Ref_Pages_Fix = ['24-XRP24_2-0039','24-XRP24_2-0090','24-XRP24_2-0134'], [[37,38],[3,3],[36,37]]
+    Prop_Nb_Fix, Ref_Pages_Fix = ['24-XRP24_2-0039'], [[37,39]]
     if Prop_Nb in Prop_Nb_Fix:
         print(colored(f"\t\tRef_Fixed = {Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0], Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]}", 'yellow'))
         Ref_Pages = [Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][0]-1, Ref_Pages_Fix[Prop_Nb_Fix.index(Prop_Nb)][1]-1]
